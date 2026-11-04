@@ -81,3 +81,4 @@ input, select { font: inherit; padding: 9px 10px; border: 1px solid var(--line);
 .zone-auto b.big { display: block; font-size: 1.08rem; color: var(--ink); }
 .zone-auto small { display: block; color: var(--ink-soft); font-size: .76rem; margin-top: 4px; }
 .zone-auto.muted-card { background: #f6f3ec; border-color: var(--line); }
+.small-hint { font-size: .82rem; margin: 4px 0 0; }

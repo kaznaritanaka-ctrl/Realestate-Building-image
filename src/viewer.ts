@@ -115,25 +115,26 @@ const WALL = { house: 0xf7f5ef, apartment: 0xf2f2ee, store: 0xd6e6ec } as const;
 function building(b: Box): THREE.Group {
   const g = new THREE.Group();
   const w = b.u1 - b.u0, d = b.v1 - b.v0, h = b.floors * b.floorHeight;
+  const y0 = (b.baseFloor ?? 0) * b.floorHeight;
   const cx = (b.u0 + b.u1) / 2, cz = -(b.v0 + b.v1) / 2;
   const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: WALL[b.kind] }));
-  body.position.set(cx, h / 2, cz); body.castShadow = true; body.receiveShadow = true;
+  body.position.set(cx, y0 + h / 2, cz); body.castShadow = true; body.receiveShadow = true;
   g.add(body);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry), new THREE.LineBasicMaterial({ color: 0x7c8a86 }));
   edges.position.copy(body.position); g.add(edges);
   // 階の区切り線
   const lineMat = new THREE.LineBasicMaterial({ color: 0xb4bcb8 });
   for (let f = 1; f < b.floors; f++) {
-    const y = f * b.floorHeight;
+    const y = y0 + f * b.floorHeight;
     const pts = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1], [b.u0, b.v0]].map(([u, v]) => new THREE.Vector3(u, y, -v));
     g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
   }
   // 窓（正面と側面）
   const winMat = new THREE.MeshLambertMaterial({ color: b.kind === "store" ? 0x9fc3d6 : 0xa9c4d6 });
   for (let f = 0; f < b.floors; f++) {
-    const y0 = f * b.floorHeight;
+    const fy = y0 + f * b.floorHeight;
     const wh = b.kind === "store" ? b.floorHeight * 0.7 : b.floorHeight * 0.42;
-    const yc = y0 + (b.kind === "store" ? wh / 2 + 0.2 : b.floorHeight * 0.55);
+    const yc = fy + (b.kind === "store" ? wh / 2 + 0.2 : b.floorHeight * 0.55);
     const nU = Math.max(1, Math.floor(w / (b.kind === "store" ? 3 : 2.4)));
     for (let i = 0; i < nU; i++) {
       const ww = (w / nU) * (b.kind === "store" ? 0.8 : 0.45);
@@ -158,13 +159,13 @@ function building(b: Box): THREE.Group {
     const geo = new THREE.ExtrudeGeometry(shape, { depth: L + 0.6, bevelEnabled: false });
     geo.translate(0, 0, -(L + 0.6) / 2);
     const roof = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x8b6f5c }));
-    roof.position.set(cx, h, cz);
+    roof.position.set(cx, y0 + h, cz);
     if (along) roof.rotation.y = Math.PI / 2;
     roof.castShadow = true;
     g.add(roof);
   } else {
     const para = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), new THREE.MeshLambertMaterial({ color: 0xe3e5e0 }));
-    para.position.set(cx, h + 0.25, cz); para.castShadow = true;
+    para.position.set(cx, y0 + h + 0.25, cz); para.castShadow = true;
     g.add(para);
   }
   return g;

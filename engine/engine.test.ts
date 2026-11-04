@@ -11,10 +11,11 @@ test("10m×20m・第一種低層・前面4〜6m：容積率と3案の基本値",
   assert.equal(r.site.farEffective, 100); // min(100, 4×0.4×100)
   const [A, B, C] = r.plans;
   assert.equal(A.metrics.floors, 2);
-  assert.ok(Math.abs(A.metrics.gfa - 115) < 1, `A gfa ${A.metrics.gfa}`);
+  assert.ok(A.metrics.gfa > 90 && A.metrics.gfa < 200, `A gfa ${A.metrics.gfa}`); // 比較モードの自宅は「中間」
   assert.ok(B.metrics.farUsed <= 100 + 0.1, `B far ${B.metrics.farUsed}`);
   assert.ok(B.metrics.bcrUsed <= 50 + 0.1, `B bcr ${B.metrics.bcrUsed}`);
-  assert.equal(C.title, "C案：月極駐車場"); // 一低は店舗不可
+  assert.equal(C.title, "C案：月極駐車場");
+  assert.equal(B.metrics.bcrUsed, 50); // 賃貸は建蔽率いっぱい // 一低は店舗不可
   assert.ok(C.metrics.parking >= 3);
   assert.ok(A.metrics.parking >= 1, "戸建の手前に駐車1台以上");
 });
@@ -56,11 +57,27 @@ test("接道なしは警告を出す", () => {
   assert.equal(r.plans[0].metrics.parking, 0);
 });
 
-test("用途を1つに絞ると同じ用途の規模違い3案", () => {
-  const r = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "house" });
-  assert.deepEqual(r.plans.map(p => p.use), ["house", "house", "house"]);
-  const g = r.plans.map(p => p.metrics.gfa);
-  assert.ok(g[0] < g[1] && g[1] < g[2], `gfa ${g}`);
+for (const use of ["house", "rental"] as const) {
+  test(`${use}：小さめ＜中間＜建蔽率いっぱい、最大案は建蔽率の上限に達する`, () => {
+    const r = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: use });
+    assert.deepEqual(r.plans.map(p => p.use), [use, use, use]);
+    assert.deepEqual(r.plans.map(p => p.size), ["small", "mid", "max"]);
+    const g = r.plans.map(p => p.metrics.gfa);
+    assert.ok(g[0] < g[1] && g[1] < g[2], `gfa ${g}`);
+    const max = r.plans[2].metrics;
+    assert.ok(Math.abs(max.bcrUsed - 60) < 0.5, `bcr ${max.bcrUsed}`);
+    assert.ok(max.farUsed <= r.site.farEffective + 0.1, `far ${max.farUsed}`);
+    assert.ok(max.floors <= r.site.floorsCap, `floors ${max.floors}`);
+  });
+}
+
+test("容積率が建蔽率の整数倍でないとき、最大案は上階を一部だけ載せる", () => {
+  // 一低 50/80 → 1階 100㎡、上に約60㎡
+  const r = computePlans({ polygon: rect(10, 20), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1low", far: 80, focusUse: "house" });
+  const m = r.plans[2];
+  assert.equal(m.buildings.length, 2);
+  assert.ok(Math.abs(m.metrics.farUsed - 80) < 0.5, `far ${m.metrics.farUsed}`);
+  assert.ok(Math.abs(m.metrics.bcrUsed - 50) < 0.5, `bcr ${m.metrics.bcrUsed}`);
 });
 
 test("工業専用地域では住宅案を出さない", () => {

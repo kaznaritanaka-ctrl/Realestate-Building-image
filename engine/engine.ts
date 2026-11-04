@@ -24,11 +24,13 @@ export interface SiteInput {
 
 export type Certainty = "confirmed" | "public" | "reference" | "guess" | "unknown" | "user";
 
-export interface Box extends Rect { floors: number; floorHeight: number; roof: "gable" | "flat"; kind: "house" | "apartment" | "store" }
+export interface Box extends Rect { floors: number; floorHeight: number; roof: "gable" | "flat"; kind: "house" | "apartment" | "store"; baseFloor?: number }
+export type Size = "small" | "mid" | "max";
 
 export interface Plan {
   id: "A" | "B" | "C";
   use: UseKey;
+  size?: Size;
   title: string;
   subtitle: string;
   buildings: Box[];
@@ -169,21 +171,38 @@ export function computePlans(input: SiteInput): EngineResult {
 
   const ctx: Ctx = { siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
 
-  const uses: { id: "A" | "B" | "C"; use: UseKey; scale: number }[] = input.focusUse
-    ? (["A", "B", "C"] as const).map((id, k) => ({ id, use: input.focusUse!, scale: [0.75, 1, 1.3][k] }))
-    : [{ id: "A", use: "house", scale: 1 }, { id: "B", use: "rental", scale: 1 }, { id: "C", use: "other", scale: 1 }];
-
-  const plans = uses.map(({ id, use, scale }) => {
-    if (!zone.housingAllowed && use !== "other") {
-      const p = planOther(ctx, scale); p.id = id;
-      p.notes.unshift("工業専用地域では住宅を建てられないため、住宅以外の活用案を表示しています。");
+  const ids = ["A", "B", "C"] as const;
+  const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建蔽率いっぱい" };
+  let plans: Plan[];
+  if (input.focusUse === "other" && zone.storeLimit === 0) {
+    // 店舗がほぼ建てられない地域：規模違いではなく、活用方法違いの3案にする
+    const alt: Plan[] = [planOther(ctx, "max"), planHouse(ctx, "small"), planRental(ctx, "max")];
+    alt[1].title = "戸建賃貸"; alt[1].use = "other";
+    alt[2].use = "other";
+    plans = alt.map((p, k) => ({ ...p, id: ids[k], title: `${ids[k]}案：${p.title}` }));
+    warnings.push("この用途地域では店舗の建築が大きく制限されるため、駐車場・戸建賃貸・アパートの3つの活用案を表示しています。");
+  } else if (input.focusUse) {
+    const sizes: Size[] = ["small", "mid", "max"];
+    plans = sizes.map((size, k) => {
+      const p = build(ctx, input.focusUse!, size, zone);
+      p.id = ids[k];
+      p.size = size;
+      p.subtitle = `${p.title}・${p.subtitle}`;
+      p.title = `${ids[k]}案：${SIZE_LABEL[size]}`;
       return p;
+    });
+    // 同じ形の案が並ぶ場合（敷地が小さい等）は注記する
+    if (plans[0].metrics.gfa === plans[2].metrics.gfa && plans[0].metrics.parking === plans[2].metrics.parking) {
+      warnings.push("敷地の条件から、規模を変えた案がほとんど同じになっています。");
     }
-    const p = use === "house" ? planHouse(ctx, scale) : use === "rental" ? planRental(ctx, scale) : planOther(ctx, scale);
-    p.id = id;
-    if (input.focusUse) p.subtitle = `${["コンパクト", "標準", "ゆったり"][["A", "B", "C"].indexOf(id)]}・${p.subtitle}`;
-    return p;
-  });
+  } else {
+    plans = (["house", "rental", "other"] as UseKey[]).map((use, k) => {
+      const p = build(ctx, use, use === "house" ? "mid" : "max", zone);
+      p.id = ids[k];
+      p.title = `${ids[k]}案：${p.title}`;
+      return p;
+    });
+  }
 
   return {
     version: ENGINE_VERSION,
@@ -257,10 +276,10 @@ function costRange(gfaOrArea: number, perTsubo: readonly [number, number]): [num
 }
 
 function finishMetrics(ctx: Ctx, buildings: Box[], stalls: Rect[], units: number | null, cost: [number, number]): Plan["metrics"] {
-  const footprint = buildings.reduce((s, b) => s + rectArea(b), 0);
+  const footprint = buildings.filter(b => !b.baseFloor).reduce((s, b) => s + rectArea(b), 0);
   const gfa = buildings.reduce((s, b) => s + rectArea(b) * b.floors, 0);
-  const floors = buildings.reduce((m, b) => Math.max(m, b.floors), 0);
-  const height = buildings.reduce((m, b) => Math.max(m, b.floors * b.floorHeight + (b.roof === "gable" ? 1.5 : 0.5)), 0);
+  const floors = buildings.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
+  const height = buildings.reduce((m, b) => Math.max(m, ((b.baseFloor ?? 0) + b.floors) * b.floorHeight + (b.roof === "gable" ? 1.5 : 0.5)), 0);
   return {
     footprint: round1(footprint), gfa: round1(gfa), floors, height: round1(height),
     bcrUsed: round1((footprint / ctx.siteArea) * 100), farUsed: round1((gfa / ctx.siteArea) * 100),
@@ -268,88 +287,130 @@ function finishMetrics(ctx: Ctx, buildings: Box[], stalls: Rect[], units: number
   };
 }
 
-function planHouse(ctx: Ctx, scale: number): Plan {
+function build(ctx: Ctx, use: UseKey, size: Size, zone: ZoneInfo): Plan {
+  if (!zone.housingAllowed && use !== "other") {
+    const p = planOther(ctx, size);
+    p.notes.unshift("工業専用地域では住宅を建てられないため、住宅以外の活用案を表示しています。");
+    return p;
+  }
+  return use === "house" ? planHouse(ctx, size) : use === "rental" ? planRental(ctx, size) : planOther(ctx, size);
+}
+
+/**
+ * 「建蔽率いっぱい」の建物：1階は置ける最大の床（建蔽率と敷地形状の小さい方）、
+ * 上の階は容積率の残りで、階数の上限まで積む。最上階が一部だけになる場合は奥寄せの小さい階を載せる
+ */
+function maxMass(ctx: Ctx, rect: Rect, floorCap: number, kind: Box["kind"], fh: number, roof: Box["roof"]): Box[] {
+  const fp = Math.min(rectArea(rect), ctx.maxFootprint);
+  const base = placeRect(rect, fp, "back");
+  const area0 = rectArea(base);
+  const full = Math.max(1, Math.min(floorCap, Math.floor(ctx.maxGFA / area0 + 1e-6)));
+  const out: Box[] = [{ ...base, floors: full, floorHeight: fh, roof, kind }];
+  const rest = ctx.maxGFA - area0 * full;
+  if (full < floorCap && rest >= 20) {
+    const top = placeRect(base, Math.min(rest, area0), "back");
+    out[0].roof = "flat";
+    out.push({ ...top, floors: 1, floorHeight: fh, roof, kind, baseFloor: full });
+  }
+  return out;
+}
+
+/** small と max の間をとる：延床を中間にして、建築面積も中間にする */
+function midMass(ctx: Ctx, rect: Rect, small: Box[], max: Box[], kind: Box["kind"], fh: number, roof: Box["roof"]): Box[] {
+  const g = (bs: Box[]) => bs.reduce((s, b) => s + rectArea(b) * b.floors, 0);
+  const f = (bs: Box[]) => bs.filter(b => !b.baseFloor).reduce((s, b) => s + rectArea(b), 0);
+  const gfa = (g(small) + g(max)) / 2;
+  const fp = Math.min((f(small) + f(max)) / 2, ctx.maxFootprint, rectArea(rect));
+  if (fp <= 0) return [];
+  const floors = Math.max(1, Math.min(ctx.floorsCap, Math.round(gfa / fp)));
+  const r = placeRect(rect, Math.min(fp, gfa / floors), "back");
+  return [{ ...r, floors, floorHeight: fh, roof, kind }];
+}
+
+const gfaOf = (bs: Box[]) => bs.reduce((s, b) => s + rectArea(b) * b.floors, 0);
+
+function planHouse(ctx: Ctx, size: Size): Plan {
   const notes: string[] = [];
   const rect = ctx.buildableRect;
-  const targetGFA = Math.min(115 * scale, ctx.maxGFA);
-  let floors = 2;
-  let fp = Math.min(targetGFA / 2, ctx.maxFootprint, rect ? rectArea(rect) : 0);
-  if (fp * 2 < targetGFA * 0.9 && ctx.floorsCap >= 3) { floors = 3; fp = Math.min(targetGFA / 3, ctx.maxFootprint, rect ? rectArea(rect) : 0); notes.push("敷地が小さいため3階建てにしています。"); }
   const buildings: Box[] = [];
-  if (rect && fp >= 15) {
-    const r = placeRect(rect, fp, "back");
-    buildings.push({ ...r, floors, floorHeight: 2.9, roof: "gable", kind: "house" });
+  const cap = Math.min(ctx.floorsCap, 3);
+  if (rect && rectArea(rect) >= 15) {
+    // 小さめ：延床90㎡前後の2階建て（敷地が小さければ3階）
+    const smallGFA = Math.min(90, ctx.maxGFA);
+    let floors = 2, fp = Math.min(smallGFA / 2, ctx.maxFootprint, rectArea(rect));
+    if (fp * 2 < smallGFA * 0.9 && cap >= 3) { floors = 3; fp = Math.min(smallGFA / 3, ctx.maxFootprint, rectArea(rect)); }
+    floors = Math.min(floors, cap);
+    const small: Box[] = [{ ...placeRect(rect, fp, "back"), floors, floorHeight: 2.9, roof: "gable", kind: "house" }];
+    const max = maxMass(ctx, rect, cap, "house", 2.9, "gable");
+    buildings.push(...(size === "small" ? small : size === "max" ? max : midMass(ctx, rect, small, max, "house", 2.9, "gable")));
+    if (buildings.some(b => (b.baseFloor ?? 0) + b.floors >= 3)) notes.push("3階建ての住宅です。");
   } else notes.push("住宅を置ける広さが確保できません。");
-  const stalls = placeStalls(ctx, buildings, 2);
-  const gfa = buildings.reduce((s, b) => s + rectArea(b) * b.floors, 0);
+  const stalls = placeStalls(ctx, buildings, size === "max" ? 1 : 2);
+  const gfa = gfaOf(buildings);
   if (gfa < 70 && buildings.length) notes.push("延床面積が70㎡未満です。間取りはかなり限られます。");
+  if (size === "max" && gfa > 250) notes.push("建蔽率・容積率いっぱいの規模です。二世帯住宅や店舗・事務所併用などの使い方が考えられます。");
+  const floors = buildings.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
   return {
-    id: "A", use: "house", title: "A案：自宅（戸建）", subtitle: `${floors}階建て・切妻屋根`,
+    id: "A", use: "house", title: "自宅（戸建）", subtitle: `${floors}階建て・延床約${Math.round(gfa)}㎡`,
     buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, null, costRange(gfa, COST.house)), notes,
   };
 }
 
-function planRental(ctx: Ctx, scale: number): Plan {
+function planRental(ctx: Ctx, size: Size): Plan {
   const notes: string[] = [];
   const rect = ctx.buildableRect;
   const buildings: Box[] = [];
-  let units = 0, owner = false;
   if (rect && rectArea(rect) >= 30) {
-    const fpMax = Math.min(rectArea(rect), ctx.maxFootprint) * Math.min(1, scale);
-    const floorsByFar = Math.floor(ctx.maxGFA / fpMax);
-    let floors = Math.max(1, Math.min(ctx.floorsCap, floorsByFar));
-    if (scale > 1) floors = Math.max(1, Math.min(ctx.floorsCap, floors + 1));
-    let fp = fpMax;
-    if (fp * floors > ctx.maxGFA) fp = ctx.maxGFA / floors;
-    const r = placeRect(rect, fp, "back");
-    buildings.push({ ...r, floors, floorHeight: 3.0, roof: "flat", kind: "apartment" });
-    const gfa = rectArea(r) * floors;
-    owner = gfa >= 200;
-    const rentable = gfa * 0.8 - (owner ? 75 : 0);
-    units = Math.max(0, Math.floor(rentable / 25));
-    if (units < 2) notes.push("賃貸住戸が2戸未満で、賃貸経営としては成り立ちにくい規模です。");
+    const max = maxMass(ctx, rect, ctx.floorsCap, "apartment", 3.0, "flat");
+    const fpMax = Math.min(rectArea(rect), ctx.maxFootprint);
+    const sFloors = Math.max(1, Math.min(2, ctx.floorsCap));
+    const sFp = Math.min(fpMax * 0.55, ctx.maxGFA / sFloors);
+    const small: Box[] = [{ ...placeRect(rect, sFp, "back"), floors: sFloors, floorHeight: 3.0, roof: "flat", kind: "apartment" }];
+    buildings.push(...(size === "small" ? small : size === "max" ? max : midMass(ctx, rect, small, max, "apartment", 3.0, "flat")));
   } else notes.push("賃貸住宅を置ける広さが確保できません。");
+  const gfa = gfaOf(buildings);
+  const units = buildings.length ? Math.max(0, Math.floor((gfa * 0.8) / 25)) : 0;
+  if (units >= 4) notes.push("オーナー住居を含める場合は、住戸2〜3戸分を自宅スペースに置き換えます（賃貸併用住宅）。");
+  if (buildings.length && units < 2) notes.push("賃貸住戸が2戸未満で、賃貸経営としては成り立ちにくい規模です。");
   const stalls = placeStalls(ctx, buildings, 8);
-  const b = buildings[0];
-  const gfa = b ? rectArea(b) * b.floors : 0;
-  const cost = costRange(gfa, b && b.floors >= 4 ? COST.rentalMid : COST.rentalLow);
+  const floors = buildings.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
+  const cost = costRange(gfa, floors >= 4 ? COST.rentalMid : COST.rentalLow);
   return {
-    id: "B", use: "rental", title: owner ? "B案：賃貸併用住宅" : "B案：アパート",
-    subtitle: b ? `${b.floors}階建て・${owner ? "オーナー住居＋" : ""}賃貸${units}戸（1K想定）` : "建築困難",
+    id: "B", use: "rental", title: "アパート・賃貸併用",
+    subtitle: buildings.length ? `${floors}階建て・賃貸${units}戸（1K想定）` : "建築困難",
     buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, units, cost), notes,
   };
 }
 
-function planOther(ctx: Ctx, scale: number): Plan {
+function planOther(ctx: Ctx, size: Size): Plan {
   const notes: string[] = [];
   const rect = ctx.buildableRect;
   const limit = ctx.zone.storeLimit;
   const buildings: Box[] = [];
   if (limit !== 0 && rect && rectArea(rect) >= 25) {
-    let fp = Math.min(rectArea(rect), ctx.maxFootprint, Math.max(30, ctx.siteArea * 0.35 * scale));
+    const ratio = size === "small" ? 0.2 : size === "mid" ? 0.35 : 1;
+    let fp = Math.min(rectArea(rect), ctx.maxFootprint, Math.max(30, ctx.siteArea * ratio));
     if (limit != null) fp = Math.min(fp, limit);
-    const r = placeRect(rect, fp, "back");
-    buildings.push({ ...r, floors: 1, floorHeight: 4.0, roof: "flat", kind: "store" });
+    buildings.push({ ...placeRect(rect, fp, "back"), floors: 1, floorHeight: 4.0, roof: "flat", kind: "store" });
   }
   const stalls = placeStalls(ctx, buildings, 200);
   const paved = stalls.length * 12.5 * 1.6;
+  const pc: [number, number] = [Math.round(paved * COST.parkingPerSqm[0]), Math.round(paved * COST.parkingPerSqm[1])];
   if (buildings.length) {
     const fa = rectArea(buildings[0]);
     const c1 = costRange(fa, COST.store);
-    const p = [Math.round(paved * COST.parkingPerSqm[0]), Math.round(paved * COST.parkingPerSqm[1])];
     if (limit != null) notes.push(`この用途地域では、店舗の床面積はおおむね${limit}㎡までに制限されます。`);
     notes.push("業種によっては建てられない店舗があります。");
     return {
-      id: "C", use: "other", title: "C案：店舗＋駐車場", subtitle: `平屋店舗 約${Math.round(fa)}㎡・駐車${stalls.length}台`,
-      buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, null, [c1[0] + p[0], c1[1] + p[1]]), notes,
+      id: "C", use: "other", title: "店舗＋駐車場", subtitle: `平屋店舗 約${Math.round(fa)}㎡・駐車${stalls.length}台`,
+      buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, null, [c1[0] + pc[0], c1[1] + pc[1]]), notes,
     };
   }
   if (limit === 0) notes.push("この用途地域では店舗の建築が大きく制限されるため、月極駐車場の案にしています。");
   if (!stalls.length) notes.push("駐車区画を確保できる形状ではありません。");
-  const p: [number, number] = [Math.round(paved * COST.parkingPerSqm[0]), Math.round(paved * COST.parkingPerSqm[1])];
   return {
-    id: "C", use: "other", title: "C案：月極駐車場", subtitle: `駐車${stalls.length}台（建物なし）`,
-    buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, null, p), notes,
+    id: "C", use: "other", title: "月極駐車場", subtitle: `駐車${stalls.length}台（建物なし）`,
+    buildings, stalls, metrics: finishMetrics(ctx, buildings, stalls, null, pc), notes,
   };
 }
 

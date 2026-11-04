@@ -96,12 +96,14 @@
     </section>
 
     <section class="wstep" data-step="5" hidden>
-      <h2>何を比べたいですか</h2>
+      <h2>どう使いたいですか</h2>
       <fieldset class="choices" id="focus">
-        <label><input type="radio" name="focus" value="" checked> 3つの使い道を比べたい（自宅・賃貸・その他活用）</label>
-        <label><input type="radio" name="focus" value="house"> 自宅だけ（規模違いの3案）</label>
-        <label><input type="radio" name="focus" value="rental"> 賃貸住宅だけ（規模違いの3案）</label>
-        <label><input type="radio" name="focus" value="other"> 店舗・駐車場などの活用だけ</label>
+        <legend>使い道</legend>
+        <label><input type="radio" name="focus" value="house" checked> 自宅を建てたい</label>
+        <label><input type="radio" name="focus" value="rental"> 賃貸経営（アパート・賃貸併用）</label>
+        <label><input type="radio" name="focus" value="other"> 店舗・駐車場などの活用</label>
+        <label><input type="radio" name="focus" value=""> まだ決めていない（3つの使い道を比べる）</label>
+        <p class="hint small-hint">使い道を選ぶと「小さめ・中間・建蔽率いっぱい」の3案を出します。</p>
       </fieldset>
       <fieldset class="choices" id="stage">
         <legend>検討の段階</legend>

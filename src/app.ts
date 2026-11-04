@@ -24,7 +24,7 @@ const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySele
 const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(document.querySelectorAll(s)) as T[];
 const KEY = "tochi-mirai:v1";
 
-const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
 
 function load(): State | null { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
@@ -329,7 +329,8 @@ function renderResult() {
   const tabs = $("#plan-tabs"); tabs.innerHTML = "";
   result.plans.forEach((p, i) => {
     const b = document.createElement("button"); b.type = "button"; b.role = "tab"; b.className = "tab" + (i === activePlan ? " active" : "");
-    b.innerHTML = `<b>${p.id}案</b><span>${esc(p.title.replace(/^[ABC]案：/, ""))}</span>`;
+    const label = p.size ? p.title.replace(/^[ABC]案：/, "") : p.title.replace(/^[ABC]案：/, "");
+    b.innerHTML = `<b>${p.id}案</b><span>${esc(label)}</span>`;
     b.addEventListener("click", () => { activePlan = i; renderResult(); });
     tabs.appendChild(b);
   });
