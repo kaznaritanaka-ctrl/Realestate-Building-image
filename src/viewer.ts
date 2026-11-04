@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { EngineResult, Plan, Box } from "../engine/engine.ts";
+import { PlateauContext, type ContextOptions } from "./context.ts";
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -12,6 +13,8 @@ export class Viewer {
   private siteGroup = new THREE.Group();
   private ro: ResizeObserver;
   private raf = 0;
+  private context: PlateauContext | null = null;
+  private contextKey = "";
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -35,7 +38,7 @@ export class Viewer {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(el);
     this.resize();
-    const loop = () => { this.controls.update(); this.renderer.render(this.scene, this.camera); this.raf = requestAnimationFrame(loop); };
+    const loop = () => { this.controls.update(); this.context?.update(this.renderer); this.renderer.render(this.scene, this.camera); this.raf = requestAnimationFrame(loop); };
     loop();
   }
 
@@ -48,7 +51,18 @@ export class Viewer {
     this.camera.updateProjectionMatrix();
   }
 
-  dispose() { cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); this.el.innerHTML = ""; }
+  /** 周辺建物（PLATEAU）を表示。同じ条件なら作り直さない */
+  setContext(opts: ContextOptions | null, onStatus?: (s: "loading" | "ready" | "error") => void) {
+    const key = opts ? JSON.stringify([opts.tilesetUrl, opts.origin, opts.frame, opts.sitePolygonUV]) : "";
+    if (key === this.contextKey) return;
+    this.contextKey = key;
+    this.context?.dispose(this.scene); this.context = null;
+    if (!opts) return;
+    this.context = new PlateauContext(opts, this.camera, this.renderer, this.scene);
+    if (onStatus) this.context.onStatus = onStatus;
+  }
+
+  dispose() { this.context?.dispose(this.scene); cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); this.el.innerHTML = ""; }
 
   setSite(res: EngineResult) {
     clear(this.siteGroup);

@@ -20,6 +20,7 @@ interface State {
   zoneApi: ZoneApi | null;
   located?: boolean;
   purposeSet?: boolean;
+  showContext?: boolean;
 }
 interface ZoneApi { available: boolean; found?: boolean; zoneName?: string | null; bcr?: number | null; far?: number | null; city?: string; source?: string; note?: string }
 
@@ -374,6 +375,7 @@ function renderResult() {
   if (!result) return;
   if (!viewer) viewer = new Viewer($("#viewer"));
   viewer.setSite(result);
+  renderContext(result);
   const tabs = $("#plan-tabs"); tabs.innerHTML = "";
   result.plans.forEach((p, i) => {
     const b = document.createElement("button"); b.type = "button"; b.role = "tab"; b.className = "tab" + (i === activePlan ? " active" : "");
@@ -423,6 +425,50 @@ function planHtml(p: Plan) {
 }
 
 const CREDIT = `出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。`;
+// 周辺建物（PLATEAU）：対応都市なら3Dに重ねて表示
+interface PlateauInfo { available: boolean; tilesetUrl?: string; credit?: string; reason?: string }
+const plateauCache = new Map<string, PlateauInfo>();
+let contextToken = 0;
+async function renderContext(res: EngineResult) {
+  const box = $("#context-box");
+  if (state.sample) { box.hidden = true; viewer?.setContext(null); return; }
+  box.hidden = false;
+  const show = state.showContext !== false;
+  const origin = lngLatToLocal(state.points).origin;
+  const key = `${origin[0].toFixed(4)},${origin[1].toFixed(4)}`;
+  const token = ++contextToken;
+  const paint = (status: string, credit = "") => {
+    box.innerHTML = `<label><input type="checkbox" id="ctx-toggle" ${show ? "checked" : ""}> 周りの建物を表示（3D都市モデル）</label>
+      <p class="status">${status}</p>${credit ? `<p class="muted credit">${esc(credit)}。測量時点のデータのため、現在の建物と異なる場合があります。</p>` : ""}`;
+    ($("#ctx-toggle") as HTMLInputElement).onchange = (e) => {
+      state.showContext = (e.target as HTMLInputElement).checked; save();
+      if (result) renderContext(result);
+    };
+  };
+  if (!show) { viewer?.setContext(null); paint("表示していません。"); return; }
+  paint("この地域のデータを確認しています…");
+  let info = plateauCache.get(key);
+  if (!info) {
+    try { info = await (await fetch(`/api/plateau?lat=${origin[1]}&lng=${origin[0]}`)).json() as PlateauInfo; }
+    catch { info = { available: false, reason: "error" }; }
+    plateauCache.set(key, info);
+    track("context", { source: info.available ? "plateau" : info.reason ?? "unavailable" });
+  }
+  if (token !== contextToken) return;
+  if (!info.available || !info.tilesetUrl) {
+    viewer?.setContext(null);
+    paint(info.reason === "not_covered" ? "この地域は、3D都市モデル（PLATEAU）がまだ整備されていません。" : "周りの建物のデータを取得できませんでした。");
+    return;
+  }
+  const credit = info.credit ?? "";
+  paint("周りの建物を読み込んでいます…", credit);
+  viewer?.setContext({ tilesetUrl: info.tilesetUrl, origin, frame: res.site.frame, sitePolygonUV: res.site.polygonUV }, (st) => {
+    if (token !== contextToken) return;
+    const p = box.querySelector(".status");
+    if (p) p.textContent = st === "loading" ? "周りの建物を読み込んでいます…" : st === "ready" ? "周りの既存の建物をグレーで表示しています（敷地内の建物は非表示）。" : "一部の建物を読み込めませんでした。";
+  });
+}
+
 // 広告枠：ASP承認後に worker/affiliates.ts に URL を入れると表示される
 interface AdSlotPub { slot: string; use: UseKey; advertiser: string; text: string }
 let adSlots: AdSlotPub[] | null = null;

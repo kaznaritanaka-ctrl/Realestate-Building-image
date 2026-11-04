@@ -14,7 +14,7 @@ interface Env {
 // 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
 const EVENT_NAMES = new Set([
   "lp_view", "wizard_view", "step_enter", "located", "shape_done", "road_set", "zone_resolved",
-  "run", "plan_tab", "sample_used", "ad_impression", "restart",
+  "run", "plan_tab", "sample_used", "ad_impression", "restart", "context",
 ]);
 const PROP_KEYS = new Set(["step", "via", "areaBucket", "edges", "roads", "source", "zone", "focus", "stage", "plan", "size", "use", "ref", "mobile"]);
 
@@ -25,6 +25,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/api/zoning") return zoning(url, env, ctx);
     if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
+    if (url.pathname === "/api/plateau") return plateau(url, ctx);
     if (url.pathname === "/api/ads") return json({ slots: AD_SLOTS.filter(s => s.url).map(({ slot, use, advertiser, text }) => ({ slot, use, advertiser, text })) });
     if (url.pathname.startsWith("/go/")) return go(url, env, ctx);
     if (url.pathname.startsWith("/api/")) return json({ error: "not_found" }, 404);
@@ -137,4 +138,48 @@ async function go(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>) =>
       .bind(sid && SID_RE.test(sid) ? sid : null, ad.slot, ad.use).run().catch(() => {}));
   }
   return new Response(null, { status: 302, headers: { location: ad.url, "cache-control": "no-store", "referrer-policy": "no-referrer-when-downgrade" } });
+}
+
+// PLATEAU（3D都市モデル）：地点の市区町村に建物の3D Tilesがあるかを調べ、あればURLを返す
+const PLATEAU_API = "https://api.plateauview.mlit.go.jp/datacatalog/3dtiles";
+async function cachedJson(key: string, url: string, ctx: { waitUntil: (p: Promise<unknown>) => void }, ttl = 86400): Promise<unknown> {
+  const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
+  const k = new Request(`https://cache.internal/${key}`);
+  let r = await cache.match(k);
+  if (!r) {
+    const up = await fetch(url);
+    if (!up.ok) throw new Error(`upstream ${up.status}`);
+    r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": `public, max-age=${ttl}` } });
+    ctx.waitUntil(cache.put(k, r.clone()));
+  }
+  return r.json();
+}
+
+async function plateau(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 20 || lat > 46 || lng < 122 || lng > 154) return json({ error: "bad_request" }, 400);
+  try {
+    const rg = await cachedJson(`gsi-rg/${lat.toFixed(4)},${lng.toFixed(4)}`,
+      `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
+    const muni = rg.results?.muniCd?.padStart(5, "0");
+    if (!muni) return json({ available: false, reason: "no_municipality" });
+    // 政令市の区コード → 市コードの順に試す（例：27127 → 27120 → 27100）
+    const n = Number(muni);
+    const candidates = [...new Set([n, Math.floor(n / 10) * 10, Math.floor(n / 100) * 100].map(c => String(c).padStart(5, "0")))];
+    for (const code of candidates) {
+      const spec = `${code}-bldg-maxlod2-latest`;
+      const ts = await cachedJson(`plateau/${spec}`, `${PLATEAU_API}/${spec}/tileset.json`, ctx) as { root?: { children?: unknown[] } };
+      if (ts.root?.children?.length) {
+        console.log(JSON.stringify({ evt: "plateau", muni, code, available: true }));
+        return json({
+          available: true, code, muni, tilesetUrl: `${PLATEAU_API}/${spec}/tileset.json`,
+          credit: "3D都市モデル（Project PLATEAU）（国土交通省）を加工して作成",
+        });
+      }
+    }
+    console.log(JSON.stringify({ evt: "plateau", muni, available: false }));
+    return json({ available: false, reason: "not_covered", muni });
+  } catch (e) {
+    return json({ available: false, reason: "error" });
+  }
 }

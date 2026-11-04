@@ -49,6 +49,8 @@ export interface EngineResult {
     area: number; zone: ZoneInfo; bcr: number; far: number; farEffective: number;
     roadWidth: number | null; floorsCap: number;
     buildableRect: Rect | null; polygonUV: Vec2[]; roadsUV: Vec2[][];
+    /** 局所平面(m)→(u,v)：u=(p-a)·ux, v=(p-a)·vx */
+    frame: { a: Vec2; ux: Vec2; vx: Vec2 };
   };
   certainty: Record<"shape" | "zone" | "bcrFar" | "road", Certainty>;
   plans: Plan[];
@@ -210,7 +212,7 @@ export function computePlans(input: SiteInput): EngineResult {
 
   return {
     version: ENGINE_VERSION,
-    site: { area: round1(siteArea), zone, bcr, far, farEffective: round1(farEffective), roadWidth, floorsCap, buildableRect, polygonUV: P, roadsUV },
+    site: { area: round1(siteArea), zone, bcr, far, farEffective: round1(farEffective), roadWidth, floorsCap, buildableRect, polygonUV: P, roadsUV, frame: { a: [a[0], a[1]], ux, vx } },
     certainty: {
       shape: "user",
       zone: input.zone === "unknown" ? "unknown" : input.zoneSource === "api" ? "public" : input.zoneSource === "guess" ? "guess" : "user",
