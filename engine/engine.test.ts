@@ -104,3 +104,32 @@ test("大きな敷地（7ha）でも計算でき、25ha超はエラー", () => {
   assert.ok(big.plans[1].metrics.bcrUsed <= 60.1);
   assert.throws(() => computePlans({ polygon: rect(600, 500), roadEdges: [{ index: 0, width: "gte12" }], zone: "r1" }), /25ha/);
 });
+
+test("道路が斜めに接する敷地では、敷地に合わせて建物を回す（建物は敷地内）", () => {
+  // 15m×20mの長方形の敷地を30°回し、道路は斜めに切った短い辺だけに接する五角形
+  const ang = (30 * Math.PI) / 180;
+  const R = ([x, y]: [number, number]): [number, number] => [x * Math.cos(ang) - y * Math.sin(ang), x * Math.sin(ang) + y * Math.cos(ang)];
+  const poly: [number, number][] = [[0, 3], [3, 0], [15, 0], [15, 20], [0, 20]].map(p => R(p as [number, number]));
+  const r = computePlans({ polygon: poly, roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "house" });
+  assert.ok(Math.abs(r.site.autoRotation) > 0.2, `auto ${r.site.autoRotation}`);
+  const phi = r.site.rotation;
+  const inPoly = (p: [number, number], P: [number, number][]) => {
+    let c = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > p[1]) !== (P[j][1] > p[1]) && p[0] < ((P[j][0] - P[i][0]) * (p[1] - P[i][1])) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
+    return c;
+  };
+  for (const p of r.plans) for (const b of p.buildings) {
+    for (const [s, t] of [[b.u0, b.v0], [b.u1, b.v0], [b.u0, b.v1], [b.u1, b.v1]]) {
+      const uv: [number, number] = [s * Math.cos(phi) - t * Math.sin(phi), s * Math.sin(phi) + t * Math.cos(phi)];
+      assert.ok(inPoly(uv, r.site.polygonUV as [number, number][]), `${p.id} corner outside`);
+    }
+  }
+});
+
+test("向きの手動調整（15°）が反映される", () => {
+  const a = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1" });
+  const b = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", rotationOffsetDeg: 15 });
+  assert.equal(a.site.rotation, 0);
+  assert.ok(Math.abs(b.site.rotation - Math.PI / 12) < 1e-9);
+  assert.ok(b.plans[0].metrics.gfa > 0);
+});

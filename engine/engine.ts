@@ -18,6 +18,8 @@ export interface SiteInput {
   far?: number;
   /** 用途を1つに絞った場合、その用途の規模違い3案にする */
   focusUse?: UseKey | null;
+  /** 自動で決めた向きからの追加回転（度） */
+  rotationOffsetDeg?: number;
   /** 用途地域等の出所：api=公的データから自動取得、user=利用者が指定、guess=街の様子から推定 */
   zoneSource?: "api" | "user" | "guess";
 }
@@ -51,6 +53,9 @@ export interface EngineResult {
     buildableRect: Rect | null; polygonUV: Vec2[]; roadsUV: Vec2[][];
     /** 局所平面(m)→(u,v)：u=(p-a)·ux, v=(p-a)·vx */
     frame: { a: Vec2; ux: Vec2; vx: Vec2 };
+    /** 建物の向き（ラジアン、(u,v)平面で反時計回り）。建物・駐車区画の座標はこの角度だけ回した (s,t) 系 */
+    rotation: number;
+    autoRotation: number;
   };
   certainty: Record<"shape" | "zone" | "bcrFar" | "road", Certainty>;
   plans: Plan[];
@@ -133,49 +138,75 @@ export function computePlans(input: SiteInput): EngineResult {
     return [e1, e2, [e2[0] + nx * w, e2[1] + ny * w], [e1[0] + nx * w, e1[1] + ny * w]];
   });
 
-  // グリッド化
-  const us = P.map(p => p[0]), vs = P.map(p => p[1]);
-  const umin = Math.min(...us), umax = Math.max(...us), vmin = Math.min(...vs), vmax = Math.max(...vs);
-  const bbox = (umax - umin) * (vmax - vmin);
-  if (bbox > MAX_BBOX_SQM) throw new Error("敷地が大きすぎます（敷地を囲む長方形で約25haまで対応）");
-  const CELL = Math.max(BASE_CELL, Math.sqrt(bbox / MAX_CELLS));
-  const cols = Math.max(1, Math.ceil((umax - umin) / CELL)), rows = Math.max(1, Math.ceil((vmax - vmin) / CELL));
-  const inside: Uint8Array[] = [], buildable: Uint8Array[] = [];
+  // グリッド化：建物の向き φ（道路の辺に対する回転）ごとに、敷地を回した座標 (s,t) で置ける範囲を調べる
   const setbacks = P.map((_, i) => setbackOf(i));
-  for (let r = 0; r < rows; r++) {
-    const ins = new Uint8Array(cols), bld = new Uint8Array(cols);
-    const v = vmin + (r + 0.5) * CELL;
-    for (let c = 0; c < cols; c++) {
-      const u = umin + (c + 0.5) * CELL;
-      if (!pointInPolygon([u, v], P)) continue;
-      ins[c] = 1;
-      let ok = true;
-      for (let i = 0; i < P.length && ok; i++) if (distToSegment([u, v], P[i], P[(i + 1) % P.length]) < setbacks[i]) ok = false;
-      bld[c] = ok ? 1 : 0;
+  const rotate = (p: Vec2, ang: number): Vec2 => [p[0] * Math.cos(ang) - p[1] * Math.sin(ang), p[0] * Math.sin(ang) + p[1] * Math.cos(ang)];
+  function buildGrid(phi: number) {
+    const Q = P.map(p => rotate(p, -phi));
+    const us = Q.map(p => p[0]), vs = Q.map(p => p[1]);
+    const umin = Math.min(...us), umax = Math.max(...us), vmin = Math.min(...vs), vmax = Math.max(...vs);
+    const bbox = (umax - umin) * (vmax - vmin);
+    if (bbox > MAX_BBOX_SQM) throw new Error("敷地が大きすぎます（敷地を囲む長方形で約25haまで対応）");
+    const CELL = Math.max(BASE_CELL, Math.sqrt(bbox / MAX_CELLS));
+    const cols = Math.max(1, Math.ceil((umax - umin) / CELL)), rows = Math.max(1, Math.ceil((vmax - vmin) / CELL));
+    const inside: Uint8Array[] = [], buildable: Uint8Array[] = [];
+    for (let r = 0; r < rows; r++) {
+      const ins = new Uint8Array(cols), bld = new Uint8Array(cols);
+      const v = vmin + (r + 0.5) * CELL;
+      for (let c = 0; c < cols; c++) {
+        const u = umin + (c + 0.5) * CELL;
+        if (!pointInPolygon([u, v], Q)) continue;
+        ins[c] = 1;
+        let ok = true;
+        for (let i = 0; i < Q.length && ok; i++) if (distToSegment([u, v], Q[i], Q[(i + 1) % Q.length]) < setbacks[i]) ok = false;
+        bld[c] = ok ? 1 : 0;
+      }
+      inside.push(ins); buildable.push(bld);
     }
-    inside.push(ins); buildable.push(bld);
+    const mr = maxRectInMask(buildable, cols);
+    const rect: Rect | null = mr ? { u0: umin + mr.c0 * CELL, v0: vmin + mr.r0 * CELL, u1: umin + mr.c1 * CELL, v1: vmin + mr.r1 * CELL } : null;
+    return { phi, Q, CELL, cols, rows, umin, vmin, inside, rect, area: rect ? rectArea(rect) : 0, cells: cols * rows };
   }
-  const mr = maxRectInMask(buildable, cols);
-  const toRect = (m: { c0: number; r0: number; c1: number; r1: number }): Rect =>
-    ({ u0: umin + m.c0 * CELL, v0: vmin + m.r0 * CELL, u1: umin + m.c1 * CELL, v1: vmin + m.r1 * CELL });
-  const buildableRect = mr ? toRect(mr) : null;
+  // 候補：道路に合わせた向き（0°）と、敷地の各辺に合わせた向き（±45°の範囲に正規化）
+  const norm = (a: number) => { let x = ((a + Math.PI / 4) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2) - Math.PI / 4; if (Math.abs(x) < 1e-6) x = 0; return x; };
+  const g0 = buildGrid(0);
+  let bestG = g0;
+  if (g0.cells <= 300_000) {
+    const cands: number[] = [];
+    for (let i = 0; i < P.length; i++) {
+      const p1 = P[i], p2 = P[(i + 1) % P.length];
+      const ang = norm(Math.atan2(p2[1] - p1[1], p2[0] - p1[0]));
+      if (Math.abs(ang) > 0.5 * Math.PI / 180 && !cands.some(c => Math.abs(c - ang) < Math.PI / 180)) cands.push(ang);
+    }
+    for (const c of cands) { const g = buildGrid(c); if (g.area > bestG.area) bestG = g; }
+    if (bestG.area < g0.area * 1.1) bestG = g0; // 差が小さければ道路向きを優先
+  }
+  const autoRotation = bestG.phi;
+  const offset = ((input.rotationOffsetDeg ?? 0) * Math.PI) / 180;
+  const G = offset ? buildGrid(autoRotation + offset) : bestG;
+  const { Q, CELL, cols, rows, umin, vmin, inside } = G;
+  const buildableRect = G.rect;
   if (!buildableRect || rectArea(buildableRect) < 12) {
     warnings.push("後退距離を確保すると建物を置ける範囲がほとんどありません。敷地の形・大きさを確認してください。");
   }
+  if (Math.abs(autoRotation) > 1e-6 && !offset) warnings.push(`敷地の形に合わせて、建物の向きを道路から約${Math.round(Math.abs(autoRotation) * 180 / Math.PI)}°回しています。`);
 
   // 階数の上限：低層系は3階（絶対高さ10m前提）、それ以外は道路斜線の簡易計算（最大5階）
   const maxFootprint = (siteArea * bcr) / 100;
   const maxGFA = (siteArea * farEffective) / 100;
   const slope = zone.residential ? 1.25 : 1.5;
   const roadForSlope = roadWidth ?? 4;
-  const frontGap = buildableRect ? buildableRect.v0 : ROAD_SETBACK;
+  // 道路からの後退距離（建物の角のうち道路にいちばん近いもの）
+  const frontGap = buildableRect
+    ? Math.max(ROAD_SETBACK, Math.min(...[[buildableRect.u0, buildableRect.v0], [buildableRect.u1, buildableRect.v0], [buildableRect.u0, buildableRect.v1], [buildableRect.u1, buildableRect.v1]].map(c => rotate(c as Vec2, G.phi)[1])))
+    : ROAD_SETBACK;
   const slantH = slope * (Math.min(roadForSlope, 12) + 2 * frontGap);
   const zoneMax = zone.lowRise ? 3 : 5;
   const floorsCap = Math.max(1, Math.min(zoneMax, Math.floor(slantH / 3.0)));
   if (floorsCap < zoneMax) warnings.push(`道路斜線を簡易計算し、正面の高さを約${slantH.toFixed(1)}m（${floorsCap}階）までとしています。上の階を後退させる設計なら、もう1階増やせる場合があります。`);
   warnings.push("北側斜線・日影規制・高度地区・地区計画は考慮していません。");
 
-  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
+  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P: Q, hasRoad: roadEdges.length > 0 };
 
   const ids = ["A", "B", "C"] as const;
   const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建ぺい率いっぱい" };
@@ -212,7 +243,7 @@ export function computePlans(input: SiteInput): EngineResult {
 
   return {
     version: ENGINE_VERSION,
-    site: { area: round1(siteArea), zone, bcr, far, farEffective: round1(farEffective), roadWidth, floorsCap, buildableRect, polygonUV: P, roadsUV, frame: { a: [a[0], a[1]], ux, vx } },
+    site: { area: round1(siteArea), zone, bcr, far, farEffective: round1(farEffective), roadWidth, floorsCap, buildableRect, polygonUV: P, roadsUV, frame: { a: [a[0], a[1]], ux, vx }, rotation: G.phi, autoRotation },
     certainty: {
       shape: "user",
       zone: input.zone === "unknown" ? "unknown" : input.zoneSource === "api" ? "public" : input.zoneSource === "guess" ? "guess" : "user",
@@ -264,8 +295,9 @@ function placeStalls(ctx: Ctx, avoid: Rect[], maxCount: number): Rect[] {
     return true;
   };
   const vmaxAll = Math.max(...ctx.P.map(p => p[1]));
-  const bands: number[] = [0];
-  for (let pos = 5; pos + 5 <= vmaxAll; pos += 16) { bands.push(pos); if (pos + 16 <= vmaxAll) bands.push(pos + 11); }
+  const t0 = ctx.vmin;
+  const bands: number[] = [t0];
+  for (let pos = t0 + 5; pos + 5 <= vmaxAll; pos += 16) { bands.push(pos); if (pos + 16 <= vmaxAll) bands.push(pos + 11); }
   const umaxAll = Math.max(...ctx.P.map(p => p[0]));
   const out: Rect[] = [];
   for (const v0 of bands) {

@@ -21,6 +21,7 @@ interface State {
   located?: boolean;
   purposeSet?: boolean;
   showContext?: boolean;
+  rotOffset?: number;
 }
 interface ZoneApi { available: boolean; found?: boolean; zoneName?: string | null; bcr?: number | null; far?: number | null; city?: string; source?: string; note?: string }
 
@@ -144,6 +145,7 @@ function go(step: number) {
   const from = state.step;
   if (step === 6 && !compute()) return;
   track("step_enter", { step });
+  if (from === 2 && step === 3) state.rotOffset = 0;
   if (from === 2 && step === 3 && state.points.length >= 3) track("shape_done", { areaBucket: areaBucket(area(localPolygon())), edges: state.points.length });
   if (from === 3 && step === 4) track("road_set", { roads: state.edges.filter(e => e !== "none").length });
   state.step = step; save();
@@ -234,7 +236,7 @@ $("#sample-btn").addEventListener("click", () => {
 $("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#restart-btn").addEventListener("click", () => {
-  Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null });
+  Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null, rotOffset: 0 });
   result = null; save(); track("restart"); go(1);
 });
 
@@ -356,6 +358,7 @@ function compute(): boolean {
       bcr: state.bcr ? Number(state.bcr) : undefined, far: state.far ? Number(state.far) : undefined,
       focusUse: state.focus || null,
       zoneSource: state.zoneSource === "none" ? undefined : state.zoneSource,
+      rotationOffsetDeg: state.rotOffset ?? 0,
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
@@ -385,7 +388,8 @@ function renderResult() {
     tabs.appendChild(b);
   });
   const p = result.plans[activePlan];
-  viewer.setPlan(p);
+  viewer.setPlan(p, result.site.rotation);
+  paintOrient();
   $("#plan-detail").innerHTML = planHtml(p);
   renderAd(p.use);
   const s = result.site;
@@ -425,6 +429,27 @@ function planHtml(p: Plan) {
 }
 
 const CREDIT = `出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。`;
+// 建物の向き：自動で決めた向きから15°ずつ回せる
+function paintOrient() {
+  if (!result) return;
+  const off = state.rotOffset ?? 0;
+  const auto = Math.round((result.site.autoRotation * 180) / Math.PI);
+  $("#rot-val").textContent = off ? `自動${off > 0 ? "+" : ""}${off}°` : auto ? `自動（敷地に合わせ${auto > 0 ? "+" : ""}${auto}°）` : "自動（道路に合わせる）";
+  ($("#rot-reset") as HTMLButtonElement).hidden = !off;
+}
+function rotateBy(delta: number) {
+  let off = (state.rotOffset ?? 0) + delta;
+  if (off > 90) off -= 180;
+  if (off <= -90) off += 180;
+  state.rotOffset = off; save();
+  const keep = activePlan;
+  if (compute()) { activePlan = keep; renderResult(); }
+  track("rotate", { deg: off });
+}
+$("#rot-l").addEventListener("click", () => rotateBy(15));
+$("#rot-r").addEventListener("click", () => rotateBy(-15));
+$("#rot-reset").addEventListener("click", () => rotateBy(-(state.rotOffset ?? 0)));
+
 // 周辺建物（PLATEAU）：対応都市なら3Dに重ねて表示
 interface PlateauInfo { available: boolean; tilesetUrl?: string; credit?: string; reason?: string }
 const plateauCache = new Map<string, PlateauInfo>();

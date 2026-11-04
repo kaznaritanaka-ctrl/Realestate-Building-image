@@ -132,3 +132,8 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .context label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
 .context .status { color: var(--ink-soft); font-size: .8rem; margin: 4px 0 0; }
 .context .credit { margin-top: 4px; }
+
+.orient { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .88rem; margin-bottom: 10px; }
+.orient b { min-width: 7.5em; text-align: center; font-size: .85rem; }
+.orient .btn.small { box-shadow: none; }
+.orient .linklike { font-size: .8rem; }

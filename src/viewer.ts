@@ -97,8 +97,9 @@ export class Viewer {
     this.controls.update();
   }
 
-  setPlan(plan: Plan) {
+  setPlan(plan: Plan, rotation = 0) {
     clear(this.planGroup);
+    this.planGroup.rotation.y = rotation; // (s,t) 系を (u,v) 系へ
     for (const b of plan.buildings) this.planGroup.add(building(b));
     const stallMat = new THREE.LineBasicMaterial({ color: 0xffffff });
     for (const s of plan.stalls) {
