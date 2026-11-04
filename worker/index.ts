@@ -33,6 +33,7 @@ async function zoning(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>
   const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
   const cacheKey = new Request(`https://cache.internal/xkt002/${Z}/${x}/${y}`);
   let res = await cache.match(cacheKey);
+  console.log(JSON.stringify({ evt: "zoning", tile: `${Z}/${x}/${y}`, cached: !!res }));
   if (!res) {
     const upstream = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY } });
     if (!upstream.ok) return json({ available: false, reason: `upstream_${upstream.status}` }, 200);
@@ -55,6 +56,7 @@ async function zoning(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>
     city: [p.prefecture, p.city_name].filter(Boolean).join(""),
     decisionDate: p.decision_date ?? null,
     source: "国土交通省 不動産情報ライブラリ（都市計画決定GISデータ）",
+    sourceUrl: "https://www.reinfolib.mlit.go.jp/",
   });
 }
 

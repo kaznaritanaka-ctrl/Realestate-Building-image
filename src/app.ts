@@ -274,7 +274,7 @@ async function renderZone() {
       auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建蔽率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
-      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建蔽率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>出典：${esc(z.source ?? "")}。公的データに基づく参考値です。境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
+      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建蔽率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
       guess.hidden = true;
     } else {
       auto.classList.add("muted-card");
@@ -350,6 +350,7 @@ function renderResult() {
       </table>
       ${result.warnings.length ? `<ul class="warn">${result.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
       ${state.sample ? `<p class="muted">※サンプルの架空の敷地です。</p>` : ""}
+      ${result.certainty.zone === "public" ? `<p class="muted credit">${CREDIT}</p>` : ""}
     </details>`;
 }
 
@@ -372,6 +373,7 @@ function planHtml(p: Plan) {
   </div>`;
 }
 
+const CREDIT = "出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。";
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 // 初期表示
