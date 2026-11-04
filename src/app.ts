@@ -483,6 +483,28 @@ async function renderContext(res: EngineResult) {
   }
   if (token !== contextToken) return;
   if (!info.available || !info.tilesetUrl) {
+    await showFootprints(res, origin, key, token, paint);
+    return;
+  }
+  const credit = info.credit ?? "";
+  paint("周りの建物を読み込んでいます…", credit);
+  viewer?.setContext({ tilesetUrl: info.tilesetUrl, origin, frame: res.site.frame, sitePolygonUV: res.site.polygonUV }, (st) => {
+    if (token !== contextToken) return;
+    const p = box.querySelector(".status");
+    const d = viewer?.contextDebug();
+    const dbg = d ? `（タイル${d.models}・地面${d.ground ?? "推定中"}${d.errors ? `・エラー${d.errors}：${d.lastError ?? ""}` : ""}）` : "";
+    if (p) p.textContent = (st === "loading" ? "周りの建物を読み込んでいます…" : st === "ready" ? "周りの既存の建物をグレーで表示しています（敷地内の建物は非表示）。" : "一部の建物を読み込めませんでした。") + dbg;
+  });
+  // 15秒たっても近くの建物が届かなければ、国土地理院のデータに切り替える
+  setTimeout(() => {
+    if (token !== contextToken) return;
+    const d = viewer?.contextDebug();
+    if (d && d.ground === null) showFootprints(res, origin, key, token, paint);
+  }, 15000);
+}
+
+async function showFootprints(res: EngineResult, origin: [number, number], key: string, token: number, paint: (status: string, credit?: string) => void) {
+  {
     // PLATEAUがない地域：国土地理院の建物外形（全国）を、種類から推定した高さで表示
     viewer?.setContext(null);
     paint("周りの建物を読み込んでいます…（国土地理院の地図データ）");
@@ -497,17 +519,7 @@ async function renderContext(res: EngineResult) {
     if (!fp.buildings.length) { paint("この地域の周りの建物のデータを取得できませんでした。"); return; }
     viewer?.setFootprints(fp.buildings, origin, res.site.frame, res.site.polygonUV);
     paint(`周りの建物${fp.buildings.length}棟をグレーで表示しています。高さは建物の種類からの推定です（3D都市モデルの対象外の地域）。`, fp.credit ?? "国土地理院最適化ベクトルタイル");
-    return;
   }
-  const credit = info.credit ?? "";
-  paint("周りの建物を読み込んでいます…", credit);
-  viewer?.setContext({ tilesetUrl: info.tilesetUrl, origin, frame: res.site.frame, sitePolygonUV: res.site.polygonUV }, (st) => {
-    if (token !== contextToken) return;
-    const p = box.querySelector(".status");
-    const d = viewer?.contextDebug();
-    const dbg = d ? `（タイル${d.models}・地面${d.ground ?? "推定中"}${d.errors ? `・エラー${d.errors}：${d.lastError ?? ""}` : ""}）` : "";
-    if (p) p.textContent = (st === "loading" ? "周りの建物を読み込んでいます…" : st === "ready" ? "周りの既存の建物をグレーで表示しています（敷地内の建物は非表示）。" : "一部の建物を読み込めませんでした。") + dbg;
-  });
 }
 
 // 広告枠：ASP承認後に worker/affiliates.ts に URL を入れると表示される

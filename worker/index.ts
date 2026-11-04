@@ -144,6 +144,8 @@ async function go(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>) =>
 
 // PLATEAU（3D都市モデル）：地点の市区町村に建物の3D Tilesがあるかを調べ、あればURLを返す
 const PLATEAU_API = "https://api.plateauview.mlit.go.jp/datacatalog/3dtiles";
+// 政令指定都市の市コード（区コードはこの値＋1〜29）
+const DESIGNATED_CITIES = [1100, 4100, 11100, 12100, 14100, 14130, 14150, 15100, 22100, 22130, 23100, 26100, 27100, 27140, 28100, 33100, 34100, 40100, 40130, 43100];
 async function cachedJson(key: string, url: string, ctx: { waitUntil: (p: Promise<unknown>) => void }, ttl = 86400): Promise<unknown> {
   const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
   const k = new Request(`https://cache.internal/${key}`);
@@ -165,9 +167,10 @@ async function plateau(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => void
       `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
     const muni = rg.results?.muniCd?.padStart(5, "0");
     if (!muni) return json({ available: false, reason: "no_municipality" });
-    // 政令市の区コード → 市コードの順に試す（例：27127 → 27120 → 27100）
+    // 政令市の区は、区コード → 市コードの順に試す（例：27127 → 27100）。それ以外の市町村はそのコードだけ
     const n = Number(muni);
-    const candidates = [...new Set([n, Math.floor(n / 10) * 10, Math.floor(n / 100) * 100].map(c => String(c).padStart(5, "0")))];
+    const city = DESIGNATED_CITIES.filter(c => n > c && n - c < 30).sort((x, y) => y - x)[0];
+    const candidates = [n, ...(city ? [city] : [])].map(c => String(c).padStart(5, "0"));
     for (const code of candidates) {
       const spec = `${code}-bldg-maxlod2-latest`;
       const ts = await cachedJson(`plateau/${spec}`, `${PLATEAU_API}/${spec}/tileset.json`, ctx) as { root?: { children?: unknown[] } };
