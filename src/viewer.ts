@@ -62,6 +62,8 @@ export class Viewer {
     if (onStatus) this.context.onStatus = onStatus;
   }
 
+  contextDebug() { return this.context?.debug ?? null; }
+
   dispose() { this.context?.dispose(this.scene); cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); this.el.innerHTML = ""; }
 
   setSite(res: EngineResult) {

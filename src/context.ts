@@ -19,6 +19,8 @@ export class PlateauContext {
   private base = new THREE.Matrix4();
   private material: THREE.MeshLambertMaterial;
   private center: THREE.Vector2;
+  private models = 0;
+  readonly debug: { models: number; samples: number; ground: number | null; errors: number } = { models: 0, samples: 0, ground: null, errors: 0 };
   onStatus: (s: "loading" | "ready" | "error") => void = () => {};
 
   constructor(private opts: ContextOptions, private camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, parent: THREE.Object3D) {
@@ -78,11 +80,16 @@ bool insideSite(vec2 p) {
         const m = o as THREE.Mesh;
         if (m.isMesh) { m.material = this.material; m.castShadow = true; m.receiveShadow = true; }
       });
+      this.debug.models++;
       if (!this.groundFixed) this.estimateGround(e.scene);
     }) as never);
     this.tiles.addEventListener("tiles-load-start", () => this.onStatus("loading"));
     this.tiles.addEventListener("tiles-load-end", () => this.onStatus("ready"));
-    this.tiles.addEventListener("load-error", () => this.onStatus("error"));
+    this.tiles.addEventListener("load-error", ((e: { error?: unknown; url?: string }) => {
+      this.debug.errors++;
+      console.warn("[plateau] load-error", e.url, e.error);
+      this.onStatus("error");
+    }) as never);
     parent.add(this.tiles.group);
   }
 
@@ -94,29 +101,44 @@ bool insideSite(vec2 p) {
 
   /** 敷地から半径60m以内の頂点の高さの下位10%を地面とみなし、敷地の地面を高さ0にそろえる */
   private estimateGround(scene: THREE.Object3D) {
-    this.tiles.group.updateMatrixWorld(true);
+    // load-model の時点ではタイルはまだグループに追加されていないので、
+    // 「グループの変換（地面補正なし）× タイル内の変換」で表示座標を計算する
+    const attached = scene.parent === this.tiles.group;
+    const saved = scene.parent;
+    if (attached) this.tiles.group.remove(scene);
+    scene.updateMatrixWorld(true);
     const ys: number[] = [];
     const v = new THREE.Vector3();
+    const m4 = new THREE.Matrix4();
+    // 近くに細かいタイルが来ないまま読み込みが進んだら、範囲を広げて推定する
+    const radius = this.models >= 8 ? 400 : 80;
     scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
       const pos = (m.geometry as THREE.BufferGeometry).getAttribute("position");
       if (!pos) return;
+      m4.multiplyMatrices(this.base, m.matrixWorld);
       const step = Math.max(1, Math.floor(pos.count / 4000));
       for (let i = 0; i < pos.count; i += step) {
-        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
-        if (Math.hypot(v.x - this.center.x, -v.z - this.center.y) < 60) ys.push(v.y + this.ground);
+        v.fromBufferAttribute(pos, i).applyMatrix4(m4);
+        if (Math.hypot(v.x - this.center.x, -v.z - this.center.y) < radius) ys.push(v.y);
       }
     });
-    if (ys.length < 30) return; // まだ近くのタイルが来ていない
+    if (attached && saved) { saved.add(scene); scene.updateMatrixWorld(true); }
+    this.models++;
+    this.debug.samples = ys.length;
+    if (ys.length < 30) return; // まだ近くの細かいタイルが来ていない
     ys.sort((a, b) => a - b);
     this.ground = ys[Math.floor(ys.length * 0.1)];
     this.groundFixed = true;
+    this.debug.ground = Math.round(this.ground * 10) / 10;
     this.applyMatrix();
+    console.info("[plateau] ground", this.debug.ground, "m, samples", ys.length);
   }
 
   update(renderer: THREE.WebGLRenderer) {
     this.camera.updateMatrixWorld();
+    this.tiles.group.updateMatrixWorld(true);
     this.tiles.setResolutionFromRenderer(this.camera, renderer);
     this.tiles.update();
   }
