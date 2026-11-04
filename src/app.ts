@@ -142,6 +142,7 @@ function go(step: number) {
     map.fitBounds(b, { padding: 80, maxZoom: 20, duration: 400 });
   }
   $("#panel").scrollTop = 0;
+  if (window.matchMedia("(max-width: 760px)").matches) window.scrollTo({ top: 0 });
 }
 
 document.addEventListener("click", (e) => {
@@ -206,7 +207,7 @@ function renderEdgeList() {
     const li = document.createElement("li");
     const sel = document.createElement("select");
     for (const [v, label] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = label; o.selected = v === choice; sel.appendChild(o); }
-    sel.addEventListener("change", () => { state.edges[i] = sel.value as EdgeChoice; save(); redrawMap(); });
+    sel.addEventListener("change", () => { state.edges[i] = sel.value as EdgeChoice; save(); redrawMap(); renderEdgeList(); });
     const lab = document.createElement("span"); lab.className = "edge-no"; lab.textContent = `辺${i + 1}`;
     const len = document.createElement("span"); len.className = "muted"; len.textContent = `${edgeLen(i).toFixed(1)}m`;
     li.append(lab, len, sel); ul.appendChild(li);
