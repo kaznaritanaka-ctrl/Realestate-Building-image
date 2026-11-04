@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>建築イメージを作る｜土地の未来図</title>
+<meta name="description" content="地図で土地を囲むだけで、自宅・賃貸・店舗など3つの使い道の建築イメージと規模の目安を、その場で3Dで確認できます。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232f6f5e%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/maplibre-gl.css">
+<link rel="stylesheet" href="/assets/style.css">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="app-body">
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">土地の未来図<small>AI建築イメージ生成</small></a>
+    <nav class="site"><a href="/#caution">注意事項</a><a href="/privacy.html">プライバシー</a></nav>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="panel" id="panel">
+    <ol class="stepper" id="stepper">
+      <li data-step="1">場所</li><li data-step="2">敷地</li><li data-step="3">道路</li><li data-step="4">法規制</li><li data-step="5">目的</li><li data-step="6">結果</li>
+    </ol>
+
+    <section class="wstep" data-step="1">
+      <h2>土地の場所を探す</h2>
+      <p class="hint">住所を入力して検索し、地図を土地の位置まで移動してください。地図をドラッグ・拡大して合わせることもできます。</p>
+      <form id="search-form" class="row">
+        <input id="search-q" type="search" placeholder="例：大阪府吹田市○○町1丁目" autocomplete="street-address" required>
+        <button type="submit" class="btn">検索</button>
+      </form>
+      <ul id="search-results" class="results"></ul>
+      <div class="actions">
+        <button class="btn primary" data-next="2">この位置で敷地を描く</button>
+      </div>
+      <p class="sample-link"><button class="linklike" id="sample-btn" type="button">地図を使わずにサンプルの土地で試す</button></p>
+    </section>
+
+    <section class="wstep" data-step="2" hidden>
+      <h2>敷地の形を描く</h2>
+      <p class="hint">航空写真の上で、敷地の<strong>角を順番にタップ</strong>してください。3点以上で形になります。境界線は目安で構いません。</p>
+      <p class="zoom-warn" id="zoom-warn" hidden>地図をもっと拡大してください（建物が判別できるくらいまで）。</p>
+      <div class="stat"><span>面積</span><b id="area-val">—</b></div>
+      <div class="row">
+        <button class="btn" id="undo-btn" type="button">1つ戻す</button>
+        <button class="btn" id="clear-btn" type="button">やり直す</button>
+      </div>
+      <div class="actions">
+        <button class="btn" data-next="1">戻る</button>
+        <button class="btn primary" id="shape-done" data-next="3" disabled>形を確定</button>
+      </div>
+    </section>
+
+    <section class="wstep" data-step="3" hidden>
+      <h2>道路に接している辺</h2>
+      <p class="hint">敷地の各辺について、道路に接しているかと道路の幅を選んでください。地図上の番号と対応しています。</p>
+      <ul id="edge-list" class="edges"></ul>
+      <div class="actions">
+        <button class="btn" data-next="2">戻る</button>
+        <button class="btn primary" data-next="4">次へ</button>
+      </div>
+    </section>
+
+    <section class="wstep" data-step="4" hidden>
+      <h2>用途地域・建蔽率・容積率</h2>
+      <p class="hint">分かる範囲で選んでください。自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。分からなければ「わからない」のままで、厳しめの代表値で計算します。</p>
+      <label class="field">用途地域
+        <select id="zone"></select>
+      </label>
+      <div class="row two">
+        <label class="field">建蔽率（%）<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
+        <label class="field">容積率（%）<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+      </div>
+      <div class="actions">
+        <button class="btn" data-next="3">戻る</button>
+        <button class="btn primary" data-next="5">次へ</button>
+      </div>
+    </section>
+
+    <section class="wstep" data-step="5" hidden>
+      <h2>何を比べたいですか</h2>
+      <fieldset class="choices" id="focus">
+        <label><input type="radio" name="focus" value="" checked> 3つの使い道を比べたい（自宅・賃貸・その他活用）</label>
+        <label><input type="radio" name="focus" value="house"> 自宅だけ（規模違いの3案）</label>
+        <label><input type="radio" name="focus" value="rental"> 賃貸住宅だけ（規模違いの3案）</label>
+        <label><input type="radio" name="focus" value="other"> 店舗・駐車場などの活用だけ</label>
+      </fieldset>
+      <fieldset class="choices" id="stage">
+        <legend>検討の段階</legend>
+        <label><input type="radio" name="stage" value="own"> 土地を持っている（相続・空き地・建替え）</label>
+        <label><input type="radio" name="stage" value="buying"> 土地の購入を検討中</label>
+        <label><input type="radio" name="stage" value="curious" checked> 情報収集・なんとなく</label>
+      </fieldset>
+      <div class="actions">
+        <button class="btn" data-next="4">戻る</button>
+        <button class="btn primary" id="run-btn" data-next="6">3案を作る</button>
+      </div>
+    </section>
+
+    <section class="wstep" data-step="6" hidden>
+      <div class="tabs" id="plan-tabs" role="tablist"></div>
+      <div id="plan-detail"></div>
+      <div id="site-summary"></div>
+      <div class="card soon">
+        <b>写真品質の建築イメージ（準備中）</b>
+        <p>この3案をもとに、AIで外観を仕上げた画像をメールでお届けする機能を準備しています。</p>
+      </div>
+      <div class="caution small">
+        <ul>
+          <li>表示は<strong>参考イメージと概算</strong>です。設計図・見積もりではありません。</li>
+          <li>建築できること、法令に適合することを保証しません。北側斜線・日影規制・高度地区・地区計画などは考慮していません。</li>
+          <li>概算工事費は当サービスの暫定の目安で、地域・仕様・時期により大きく変わります。</li>
+        </ul>
+      </div>
+      <div class="actions">
+        <button class="btn" data-next="5">条件を変える</button>
+        <button class="btn" id="restart-btn" type="button">最初から</button>
+      </div>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div id="map" class="map"></div>
+    <div id="viewer" class="viewer" hidden></div>
+    <div id="map-tools" class="map-tools">
+      <button type="button" id="layer-btn" class="btn small">地図に切替</button>
+    </div>
+  </main>
+</div>
+<script src="/assets/app.js" defer></script>
+</body>
+</html>
