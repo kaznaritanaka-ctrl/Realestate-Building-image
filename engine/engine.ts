@@ -55,7 +55,9 @@ export interface EngineResult {
   warnings: string[];
 }
 
-const CELL = 0.25;
+const BASE_CELL = 0.25;      // 計算グリッドの細かさ（m）。大きな敷地では自動で粗くする
+const MAX_CELLS = 1_000_000; // グリッドのセル数の上限（計算時間の目安）
+const MAX_BBOX_SQM = 250_000; // 敷地を囲む長方形の上限（約25ha）
 const ROAD_SETBACK = 1.0;  // 道路側の後退（アプローチ・駐車の余地を含む目安）
 const SIDE_SETBACK = 0.5;  // 隣地側（民法234条の目安）
 const WIDTH_M: Record<RoadWidthClass, number> = { lt4: 4, "4to6": 4, "6to12": 6, gte12: 12 };
@@ -132,8 +134,10 @@ export function computePlans(input: SiteInput): EngineResult {
   // グリッド化
   const us = P.map(p => p[0]), vs = P.map(p => p[1]);
   const umin = Math.min(...us), umax = Math.max(...us), vmin = Math.min(...vs), vmax = Math.max(...vs);
+  const bbox = (umax - umin) * (vmax - vmin);
+  if (bbox > MAX_BBOX_SQM) throw new Error("敷地が大きすぎます（敷地を囲む長方形で約25haまで対応）");
+  const CELL = Math.max(BASE_CELL, Math.sqrt(bbox / MAX_CELLS));
   const cols = Math.max(1, Math.ceil((umax - umin) / CELL)), rows = Math.max(1, Math.ceil((vmax - vmin) / CELL));
-  if (cols * rows > 4_000_000) throw new Error("敷地が大きすぎます（MVPは約1ha以下に対応）");
   const inside: Uint8Array[] = [], buildable: Uint8Array[] = [];
   const setbacks = P.map((_, i) => setbackOf(i));
   for (let r = 0; r < rows; r++) {
@@ -169,7 +173,7 @@ export function computePlans(input: SiteInput): EngineResult {
   if (floorsCap < zoneMax) warnings.push(`道路斜線を簡易計算し、正面の高さを約${slantH.toFixed(1)}m（${floorsCap}階）までとしています。上の階を後退させる設計なら、もう1階増やせる場合があります。`);
   warnings.push("北側斜線・日影規制・高度地区・地区計画は考慮していません。");
 
-  const ctx: Ctx = { siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
+  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
 
   const ids = ["A", "B", "C"] as const;
   const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建ぺい率いっぱい" };
@@ -222,6 +226,7 @@ export function computePlans(input: SiteInput): EngineResult {
 }
 
 interface Ctx {
+  cell: number;
   siteArea: number; bcr: number; far: number; farEffective: number;
   maxFootprint: number; maxGFA: number; floorsCap: number; zone: ZoneInfo;
   buildableRect: Rect | null; inside: Uint8Array[]; cols: number; rows: number; umin: number; vmin: number; P: Vec2[];
@@ -248,7 +253,7 @@ function placeRect(rect: Rect, target: number, anchor: "back" | "front" | "fill"
 function placeStalls(ctx: Ctx, avoid: Rect[], maxCount: number): Rect[] {
   if (!ctx.hasRoad || maxCount <= 0) return [];
   const free = (u: number, v: number) => {
-    const c = Math.floor((u - ctx.umin) / CELL), r = Math.floor((v - ctx.vmin) / CELL);
+    const c = Math.floor((u - ctx.umin) / ctx.cell), r = Math.floor((v - ctx.vmin) / ctx.cell);
     if (r < 0 || r >= ctx.rows || c < 0 || c >= ctx.cols || !ctx.inside[r][c]) return false;
     return !avoid.some(b => u > b.u0 - 0.3 && u < b.u1 + 0.3 && v > b.v0 - 0.3 && v < b.v1 + 0.3);
   };

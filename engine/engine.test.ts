@@ -97,3 +97,10 @@ test("経緯度→局所座標：約10m×20mの敷地", () => {
   const { local } = lngLatToLocal([[lng, lat], [lng + dLng, lat], [lng + dLng, lat + dLat], [lng, lat + dLat]]);
   assert.ok(Math.abs(area(local) - 200) < 2, `area ${area(local)}`);
 });
+
+test("大きな敷地（7ha）でも計算でき、25ha超はエラー", () => {
+  const big = computePlans({ polygon: rect(250, 280), roadEdges: [{ index: 0, width: "gte12" }], zone: "quasiInd" });
+  assert.equal(big.site.area, 70000);
+  assert.ok(big.plans[1].metrics.bcrUsed <= 60.1);
+  assert.throws(() => computePlans({ polygon: rect(600, 500), roadEdges: [{ index: 0, width: "gte12" }], zone: "r1" }), /25ha/);
+});
