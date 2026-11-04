@@ -133,7 +133,10 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .context .status { color: var(--ink-soft); font-size: .8rem; margin: 4px 0 0; }
 .context .credit { margin-top: 4px; }
 
-.orient { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .88rem; margin-bottom: 10px; }
-.orient b { min-width: 7.5em; text-align: center; font-size: .85rem; }
-.orient .btn.small { box-shadow: none; }
-.orient .linklike { font-size: .8rem; }
+/* 向きのダイヤル：ボタンの位置が動かないよう3列固定。中央に現在の向きと「自動に戻す」 */
+.orient { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px; font-size: .88rem; margin-bottom: 10px; }
+.orient-mid { display: flex; flex-direction: column; align-items: center; line-height: 1.3; min-width: 0; }
+.orient-mid b { font-size: .82rem; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.orient-mid .linklike { font-size: .76rem; }
+.orient-mid .linklike.off { visibility: hidden; }
+.orient .btn.small { box-shadow: none; white-space: nowrap; }
