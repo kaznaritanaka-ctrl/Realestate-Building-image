@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { EngineResult, Plan, Box } from "../engine/engine.ts";
-import { PlateauContext, type ContextOptions } from "./context.ts";
+import { PlateauContext, FootprintContext, type ContextOptions, type FootprintBuilding } from "./context.ts";
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -14,6 +14,7 @@ export class Viewer {
   private ro: ResizeObserver;
   private raf = 0;
   private context: PlateauContext | null = null;
+  private footprints: FootprintContext | null = null;
   private contextKey = "";
 
   constructor(private el: HTMLElement) {
@@ -57,9 +58,20 @@ export class Viewer {
     if (key === this.contextKey) return;
     this.contextKey = key;
     this.context?.dispose(this.scene); this.context = null;
+    this.footprints?.dispose(this.scene); this.footprints = null;
     if (!opts) return;
     this.context = new PlateauContext(opts, this.camera, this.renderer, this.scene);
     if (onStatus) this.context.onStatus = onStatus;
+  }
+
+  /** PLATEAUがない地域：国土地理院の建物外形を押し出して表示 */
+  setFootprints(buildings: FootprintBuilding[], origin: [number, number], frame: { a: [number, number]; ux: [number, number]; vx: [number, number] }, site: [number, number][]) {
+    const key = JSON.stringify(["fp", buildings.length, origin, frame, site]);
+    if (key === this.contextKey) return;
+    this.contextKey = key;
+    this.context?.dispose(this.scene); this.context = null;
+    this.footprints?.dispose(this.scene); this.footprints = null;
+    this.footprints = new FootprintContext(buildings, origin, frame, site, this.scene);
   }
 
   contextDebug() { return this.context?.debug ?? null; }

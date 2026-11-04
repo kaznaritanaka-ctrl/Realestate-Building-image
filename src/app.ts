@@ -453,6 +453,8 @@ $("#rot-reset").addEventListener("click", () => rotateBy(-(state.rotOffset ?? 0)
 // 周辺建物（PLATEAU）：対応都市なら3Dに重ねて表示
 interface PlateauInfo { available: boolean; tilesetUrl?: string; credit?: string; reason?: string }
 const plateauCache = new Map<string, PlateauInfo>();
+interface FootprintInfo { buildings: { h: number; ring: [number, number][] }[]; credit?: string }
+const footprintCache = new Map<string, FootprintInfo>();
 let contextToken = 0;
 async function renderContext(res: EngineResult) {
   const box = $("#context-box");
@@ -463,7 +465,7 @@ async function renderContext(res: EngineResult) {
   const key = `${origin[0].toFixed(4)},${origin[1].toFixed(4)}`;
   const token = ++contextToken;
   const paint = (status: string, credit = "") => {
-    box.innerHTML = `<label><input type="checkbox" id="ctx-toggle" ${show ? "checked" : ""}> 周りの建物を表示（3D都市モデル）</label>
+    box.innerHTML = `<label><input type="checkbox" id="ctx-toggle" ${show ? "checked" : ""}> 周りの建物を表示</label>
       <p class="status">${status}</p>${credit ? `<p class="muted credit">${esc(credit)}。測量時点のデータのため、現在の建物と異なる場合があります。</p>` : ""}`;
     ($("#ctx-toggle") as HTMLInputElement).onchange = (e) => {
       state.showContext = (e.target as HTMLInputElement).checked; save();
@@ -481,8 +483,20 @@ async function renderContext(res: EngineResult) {
   }
   if (token !== contextToken) return;
   if (!info.available || !info.tilesetUrl) {
+    // PLATEAUがない地域：国土地理院の建物外形（全国）を、種類から推定した高さで表示
     viewer?.setContext(null);
-    paint(info.reason === "not_covered" ? "この地域は、3D都市モデル（PLATEAU）がまだ整備されていません。" : "周りの建物のデータを取得できませんでした。");
+    paint("周りの建物を読み込んでいます…（国土地理院の地図データ）");
+    let fp = footprintCache.get(key);
+    if (!fp) {
+      try { fp = await (await fetch(`/api/buildings?lat=${origin[1]}&lng=${origin[0]}&r=150`)).json() as FootprintInfo; }
+      catch { fp = { buildings: [] }; }
+      footprintCache.set(key, fp);
+      track("context", { source: fp.buildings.length ? "gsi" : "none" });
+    }
+    if (token !== contextToken) return;
+    if (!fp.buildings.length) { paint("この地域の周りの建物のデータを取得できませんでした。"); return; }
+    viewer?.setFootprints(fp.buildings, origin, res.site.frame, res.site.polygonUV);
+    paint(`周りの建物${fp.buildings.length}棟をグレーで表示しています。高さは建物の種類からの推定です（3D都市モデルの対象外の地域）。`, fp.credit ?? "国土地理院最適化ベクトルタイル");
     return;
   }
   const credit = info.credit ?? "";

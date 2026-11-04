@@ -47,7 +47,7 @@ export async function gsiBuildings(lat: number, lng: number, radius: number, fet
         if (f.type !== 3) continue; // ポリゴンのみ
         const props = f.properties as Record<string, string | number>;
         if (debug && samples.length < 5) samples.push({ layer: name, ...props });
-        const code = String(props.ftCode ?? props.ftcode ?? "");
+        const code = String(props.vt_code ?? props.ftCode ?? props.ftcode ?? "");
         const kindName = String(props.type ?? props.name ?? props.vt_name ?? "");
         let h = HEIGHT_BY_CODE[code];
         if (h === undefined) h = HEIGHT_BY_NAME.find(([re]) => re.test(kindName))?.[1] ?? 6.5;
