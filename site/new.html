@@ -75,10 +75,10 @@
       </div>
       <details class="card" id="zone-detail">
         <summary>正確な値を自分で指定する <button type="button" class="help" aria-label="説明" data-tip="自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。">?</button></summary>
-        <div class="row three">
-          <label class="field grow">用途地域<select id="zone"></select></label>
-          <label class="field">建蔽率％<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
-          <label class="field">容積率％<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+        <label class="field">用途地域<select id="zone"></select></label>
+        <div class="row two">
+          <label class="field">容積率（％）<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+          <label class="field">建ぺい率（％）<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
         </div>
       </details>
       <div class="actions">
