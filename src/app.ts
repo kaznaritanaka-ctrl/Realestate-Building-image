@@ -17,6 +17,8 @@ interface State {
   zoneSource: "api" | "user" | "guess" | "none";
   zoneFetchedFor: string;
   zoneApi: ZoneApi | null;
+  located?: boolean;
+  purposeSet?: boolean;
 }
 interface ZoneApi { available: boolean; found?: boolean; zoneName?: string | null; bcr?: number | null; far?: number | null; city?: string; source?: string; note?: string }
 
@@ -70,13 +72,14 @@ map.on("load", () => {
 const MIN_DRAW_ZOOM = 16;
 const zoomWarn = () => { $("#zoom-warn").hidden = !(state.step === 2 && map.getZoom() < MIN_DRAW_ZOOM); };
 map.on("zoomend", zoomWarn);
+map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); } });
 
 map.on("click", (e) => {
   if (state.step !== 2) return;
   if (map.getZoom() < MIN_DRAW_ZOOM) { zoomWarn(); return; }
   state.points.push([e.lngLat.lng, e.lngLat.lat]);
   state.edges = [];
-  save(); redrawMap(); updateArea();
+  save(); redrawMap(); updateArea(); paintStepper();
 });
 
 function fc(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection { return { type: "FeatureCollection", features }; }
@@ -139,10 +142,7 @@ function go(step: number) {
   if (step === 6 && !compute()) return;
   state.step = step; save();
   $$("section.wstep").forEach(s => (s.hidden = Number(s.dataset.step) !== step));
-  $$("#stepper li").forEach(li => {
-    const n = Number(li.dataset.step);
-    li.classList.toggle("active", n === step); li.classList.toggle("done", n < step);
-  });
+  paintStepper();
   const show3d = step === 6;
   $("#viewer").hidden = !show3d;
   $("#map").style.visibility = show3d ? "hidden" : "visible";
@@ -160,9 +160,35 @@ function go(step: number) {
   if (window.matchMedia("(max-width: 760px)").matches) window.scrollTo({ top: 0 });
 }
 
+/** 各ステップが入力済みか */
+function isDone(n: number): boolean {
+  switch (n) {
+    case 1: return !!state.located || state.points.length > 0;
+    case 2: return state.points.length >= 3;
+    case 3: return state.edges.some(e => e !== "none");
+    case 4: return state.zoneSource !== "none";
+    case 5: return !!state.purposeSet;
+    case 6: return !!result;
+    default: return false;
+  }
+}
+function paintStepper() {
+  $$<HTMLButtonElement>("#stepper button").forEach(b => {
+    const n = Number(b.dataset.step);
+    const active = n === state.step, done = isDone(n);
+    b.classList.toggle("active", active);
+    b.classList.toggle("done", !active && done);
+    b.classList.toggle("todo", !active && !done);
+    b.title = done ? "入力済み" : "未入力";
+    if (active) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+  });
+}
+
 document.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement).closest("[data-next]") as HTMLElement | null;
-  if (t) { e.preventDefault(); go(Number(t.dataset.next)); }
+  if (t) { e.preventDefault(); if (t.id === "run-btn") { state.purposeSet = true; } go(Number(t.dataset.next)); return; }
+  const s = (e.target as HTMLElement).closest("#stepper button") as HTMLElement | null;
+  if (s) { e.preventDefault(); go(Number(s.dataset.step)); }
 });
 
 // Step1：住所検索（国土地理院 住所検索API）
@@ -180,7 +206,7 @@ $("#search-form").addEventListener("submit", async (e) => {
     for (const d of data.slice(0, 8)) {
       const li = document.createElement("li");
       const b = document.createElement("button"); b.type = "button"; b.className = "linklike"; b.textContent = d.properties.title;
-      b.addEventListener("click", () => { map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 }); ul.innerHTML = ""; });
+      b.addEventListener("click", () => { map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 }); ul.innerHTML = ""; state.located = true; save(); paintStepper(); });
       li.appendChild(b); ul.appendChild(li);
     }
   } catch {
@@ -195,13 +221,16 @@ $("#sample-btn").addEventListener("click", () => {
   const local: Vec2[] = [[0, 0], [12.5, 0], [13.5, 19], [-0.5, 20.5]];
   state.points = local.map(([x, y]) => [c[0] + x * dLng, c[1] + y * dLat]);
   state.edges = ["4to6", "none", "none", "none"];
-  state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true; state.zoneSource = "guess";
+  state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true; state.zoneSource = "guess"; state.located = true; state.purposeSet = true;
   save(); go(6);
 });
 
-$("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); });
-$("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); });
-$("#restart-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); go(1); });
+$("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#restart-btn").addEventListener("click", () => {
+  Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null });
+  result = null; save(); go(1);
+});
 
 let photo = true;
 $("#layer-btn").addEventListener("click", () => {
@@ -222,7 +251,7 @@ function renderEdgeList() {
     const li = document.createElement("li");
     const sel = document.createElement("select");
     for (const [v, label] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = label; o.selected = v === choice; sel.appendChild(o); }
-    sel.addEventListener("change", () => { state.edges[i] = sel.value as EdgeChoice; save(); redrawMap(); renderEdgeList(); });
+    sel.addEventListener("change", () => { state.edges[i] = sel.value as EdgeChoice; save(); redrawMap(); renderEdgeList(); paintStepper(); });
     const lab = document.createElement("span"); lab.className = "edge-no"; lab.textContent = `辺${i + 1}`;
     const len = document.createElement("span"); len.className = "muted"; len.textContent = `${edgeLen(i).toFixed(1)}m`;
     li.append(lab, len, sel); ul.appendChild(li);
@@ -278,6 +307,7 @@ async function renderZone() {
   }));
 
   function paint() {
+    paintStepper();
     const z = state.zoneApi;
     auto.classList.remove("muted-card");
     if (state.zoneSource === "user") {
@@ -300,8 +330,8 @@ async function renderZone() {
 }
 
 // Step5
-$$<HTMLInputElement>("input[name=focus]").forEach(r => r.addEventListener("change", () => { state.focus = r.value as State["focus"]; save(); }));
-$$<HTMLInputElement>("input[name=stage]").forEach(r => r.addEventListener("change", () => { state.stage = r.value; save(); }));
+$$<HTMLInputElement>("input[name=focus]").forEach(r => r.addEventListener("change", () => { state.focus = r.value as State["focus"]; state.purposeSet = true; save(); paintStepper(); }));
+$$<HTMLInputElement>("input[name=stage]").forEach(r => r.addEventListener("change", () => { state.stage = r.value; state.purposeSet = true; save(); paintStepper(); }));
 function syncRadios() {
   $$<HTMLInputElement>("input[name=focus]").forEach(r => (r.checked = r.value === state.focus));
   $$<HTMLInputElement>("input[name=stage]").forEach(r => (r.checked = r.value === state.stage));
