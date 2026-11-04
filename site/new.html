@@ -64,15 +64,31 @@
     </section>
 
     <section class="wstep" data-step="4" hidden>
-      <h2>用途地域・建蔽率・容積率</h2>
-      <p class="hint">分かる範囲で選んでください。自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。分からなければ「わからない」のままで、厳しめの代表値で計算します。</p>
-      <label class="field">用途地域
-        <select id="zone"></select>
-      </label>
-      <div class="row two">
-        <label class="field">建蔽率（%）<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
-        <label class="field">容積率（%）<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+      <h2>この土地のルール（用途地域）</h2>
+      <p class="hint">建てられる建物の大きさは、土地ごとに決まっている「用途地域」「建蔽率」「容積率」で変わります。</p>
+      <div id="zone-auto" class="card zone-auto">調べています…</div>
+      <div id="zone-guess" hidden>
+        <p class="hint">周りの様子にいちばん近いものを選んでください。</p>
+        <fieldset class="choices" id="townfeel">
+          <label><input type="radio" name="townfeel" value="r1low"> 戸建てが中心の静かな住宅街</label>
+          <label><input type="radio" name="townfeel" value="r1mid"> マンションやお店も混じる住宅街</label>
+          <label><input type="radio" name="townfeel" value="r1"> 大きな道路沿い・お店や事務所が多い</label>
+          <label><input type="radio" name="townfeel" value="nbrCom"> 駅前・商店街</label>
+          <label><input type="radio" name="townfeel" value="quasiInd"> 工場や倉庫が多い</label>
+          <label><input type="radio" name="townfeel" value="unknown"> わからない（厳しめに計算）</label>
+        </fieldset>
       </div>
+      <details class="card" id="zone-detail">
+        <summary>正確な値を自分で指定する</summary>
+        <p class="hint">自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。</p>
+        <label class="field">用途地域
+          <select id="zone"></select>
+        </label>
+        <div class="row two">
+          <label class="field">建蔽率（%）<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
+          <label class="field">容積率（%）<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+        </div>
+      </details>
       <div class="actions">
         <button class="btn" data-next="3">戻る</button>
         <button class="btn primary" data-next="5">次へ</button>

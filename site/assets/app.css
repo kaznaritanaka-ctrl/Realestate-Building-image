@@ -76,3 +76,8 @@ input, select { font: inherit; padding: 9px 10px; border: 1px solid var(--line);
 }
 
 .zoom-warn { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: .88rem; }
+
+.zone-auto { background: var(--accent-soft); border-color: #cfe1d8; font-size: .92rem; }
+.zone-auto b.big { display: block; font-size: 1.08rem; color: var(--ink); }
+.zone-auto small { display: block; color: var(--ink-soft); font-size: .76rem; margin-top: 4px; }
+.zone-auto.muted-card { background: #f6f3ec; border-color: var(--line); }

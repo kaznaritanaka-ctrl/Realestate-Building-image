@@ -18,9 +18,11 @@ export interface SiteInput {
   far?: number;
   /** 用途を1つに絞った場合、その用途の規模違い3案にする */
   focusUse?: UseKey | null;
+  /** 用途地域等の出所：api=公的データから自動取得、user=利用者が指定、guess=街の様子から推定 */
+  zoneSource?: "api" | "user" | "guess";
 }
 
-export type Certainty = "confirmed" | "reference" | "unknown" | "user";
+export type Certainty = "confirmed" | "public" | "reference" | "guess" | "unknown" | "user";
 
 export interface Box extends Rect { floors: number; floorHeight: number; roof: "gable" | "flat"; kind: "house" | "apartment" | "store" }
 
@@ -160,9 +162,9 @@ export function computePlans(input: SiteInput): EngineResult {
   const roadForSlope = roadWidth ?? 4;
   const frontGap = buildableRect ? buildableRect.v0 : ROAD_SETBACK;
   const slantH = slope * (Math.min(roadForSlope, 12) + 2 * frontGap);
-  let floorsCap = zone.lowRise ? 3 : Math.max(1, Math.min(5, Math.floor(slantH / 3.0)));
-  if (!zone.lowRise && floorsCap < 5) warnings.push(`道路斜線を簡易計算し、正面の高さを約${slantH.toFixed(1)}m（${floorsCap}階）までとしています。`);
-  if (zone.lowRise) floorsCap = Math.min(floorsCap, 3);
+  const zoneMax = zone.lowRise ? 3 : 5;
+  const floorsCap = Math.max(1, Math.min(zoneMax, Math.floor(slantH / 3.0)));
+  if (floorsCap < zoneMax) warnings.push(`道路斜線を簡易計算し、正面の高さを約${slantH.toFixed(1)}m（${floorsCap}階）までとしています。上の階を後退させる設計なら、もう1階増やせる場合があります。`);
   warnings.push("北側斜線・日影規制・高度地区・地区計画は考慮していません。");
 
   const ctx: Ctx = { siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
@@ -188,8 +190,11 @@ export function computePlans(input: SiteInput): EngineResult {
     site: { area: round1(siteArea), zone, bcr, far, farEffective: round1(farEffective), roadWidth, floorsCap, buildableRect, polygonUV: P, roadsUV },
     certainty: {
       shape: "user",
-      zone: input.zone === "unknown" ? "unknown" : "user",
-      bcrFar: input.bcr != null || input.far != null ? "user" : input.zone === "unknown" ? "unknown" : "reference",
+      zone: input.zone === "unknown" ? "unknown" : input.zoneSource === "api" ? "public" : input.zoneSource === "guess" ? "guess" : "user",
+      bcrFar: input.zone === "unknown" && input.bcr == null && input.far == null ? "unknown"
+        : input.zoneSource === "api" ? "public"
+        : input.bcr != null || input.far != null ? "user"
+        : input.zoneSource === "guess" ? "guess" : "reference",
       road: roadEdges.length ? "user" : "unknown",
     },
     plans,

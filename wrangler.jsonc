@@ -1,11 +1,15 @@
 {
-  // 公開準備中の静的サイト（Workers Static Assets）
+  // 土地の未来図：静的アセット＋API Worker
   "name": "realestate-site",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
-    "directory": "./site"
+    "directory": "./site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   },
   "routes": [
     { "pattern": "realestate.ai-investment-research.net", "custom_domain": true }
   ]
+  // シークレット：REINFOLIB_KEY（不動産情報ライブラリのAPIキー）は `wrangler secret put` またはダッシュボードで設定
 }

@@ -14,13 +14,18 @@ interface State {
   focus: "" | UseKey;
   stage: string;
   sample: boolean;
+  zoneSource: "api" | "user" | "guess" | "none";
+  zoneFetchedFor: string;
+  zoneApi: ZoneApi | null;
 }
+interface ZoneApi { available: boolean; found?: boolean; zoneName?: string | null; bcr?: number | null; far?: number | null; city?: string; source?: string; note?: string }
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
 const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(document.querySelectorAll(s)) as T[];
 const KEY = "tochi-mirai:v1";
 
-const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "", stage: "curious", sample: false };
+const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
 
 function load(): State | null { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* 保存できない環境では無視 */ } }
@@ -180,7 +185,7 @@ $("#sample-btn").addEventListener("click", () => {
   const local: Vec2[] = [[0, 0], [12.5, 0], [13.5, 19], [-0.5, 20.5]];
   state.points = local.map(([x, y]) => [c[0] + x * dLng, c[1] + y * dLat]);
   state.edges = ["4to6", "none", "none", "none"];
-  state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true;
+  state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true; state.zoneSource = "guess";
   save(); go(6);
 });
 
@@ -218,18 +223,70 @@ function renderEdgeList() {
   }
 }
 
-// Step4：用途地域
-function renderZone() {
+// Step4：用途地域（公的データから半自動取得 → だめなら街の様子から推定 → 詳細は手入力）
+const ZONE_BY_NAME = new Map(ZONE_ORDER.filter(k => k !== "unknown").map(k => [ZONES[k].label, k] as const));
+
+function centroid(): Vec2 {
+  const p = state.points; return [p.reduce((s, q) => s + q[0], 0) / p.length, p.reduce((s, q) => s + q[1], 0) / p.length];
+}
+
+async function fetchZoning() {
+  const c = centroid();
+  const key = `${c[0].toFixed(5)},${c[1].toFixed(5)}`;
+  if (state.zoneFetchedFor === key && state.zoneApi) return;
+  state.zoneFetchedFor = key; state.zoneApi = null;
+  try {
+    const r = await fetch(`/api/zoning?lat=${c[1]}&lng=${c[0]}`);
+    state.zoneApi = r.ok ? await r.json() : { available: false };
+  } catch { state.zoneApi = { available: false }; }
+  const z = state.zoneApi!;
+  if (z.available && z.found && state.zoneSource !== "user") {
+    state.zone = (z.zoneName && ZONE_BY_NAME.get(z.zoneName)) || "unknown";
+    state.bcr = z.bcr != null ? String(z.bcr) : ""; state.far = z.far != null ? String(z.far) : "";
+    state.zoneSource = "api";
+  }
+  save();
+}
+
+async function renderZone() {
+  const auto = $("#zone-auto"), guess = $("#zone-guess");
   const sel = $("#zone") as HTMLSelectElement;
   if (!sel.options.length) for (const k of ZONE_ORDER) { const o = document.createElement("option"); o.value = k; o.textContent = ZONES[k].label; sel.appendChild(o); }
-  sel.value = state.zone;
   const bcr = $("#bcr") as HTMLInputElement, far = $("#far") as HTMLInputElement;
-  bcr.value = state.bcr; far.value = state.far;
-  const ph = () => { bcr.placeholder = `代表値 ${ZONES[sel.value as ZoneKey].bcr}`; far.placeholder = `代表値 ${ZONES[sel.value as ZoneKey].far}`; };
-  ph();
-  sel.onchange = () => { state.zone = sel.value as ZoneKey; ph(); save(); };
-  bcr.oninput = () => { state.bcr = bcr.value; save(); };
-  far.oninput = () => { state.far = far.value; save(); };
+  const syncDetail = () => {
+    sel.value = state.zone; bcr.value = state.bcr; far.value = state.far;
+    bcr.placeholder = `代表値 ${ZONES[state.zone].bcr}`; far.placeholder = `代表値 ${ZONES[state.zone].far}`;
+    $$<HTMLInputElement>("input[name=townfeel]").forEach(r => (r.checked = state.zoneSource === "guess" && r.value === state.zone));
+  };
+  const toUser = () => { state.zoneSource = "user"; save(); paint(); };
+  sel.onchange = () => { state.zone = sel.value as ZoneKey; toUser(); };
+  bcr.oninput = () => { state.bcr = bcr.value; state.zoneSource = "user"; save(); };
+  far.oninput = () => { state.far = far.value; state.zoneSource = "user"; save(); };
+  bcr.onchange = far.onchange = () => paint();
+  $$<HTMLInputElement>("input[name=townfeel]").forEach(r => (r.onchange = () => {
+    state.zone = r.value as ZoneKey; state.bcr = ""; state.far = ""; state.zoneSource = "guess"; save(); paint();
+  }));
+
+  function paint() {
+    const z = state.zoneApi;
+    auto.classList.remove("muted-card");
+    if (state.zoneSource === "user") {
+      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建蔽率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
+      guess.hidden = true;
+    } else if (z?.available && z.found && state.zoneSource === "api") {
+      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建蔽率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>出典：${esc(z.source ?? "")}。公的データに基づく参考値です。境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
+      guess.hidden = true;
+    } else {
+      auto.classList.add("muted-card");
+      auto.innerHTML = z === null ? "調べています…"
+        : z.available && !z.found ? `この地点では用途地域が見つかりませんでした。<small>${esc(z.note ?? "")}。市街化調整区域では原則として建築が制限されます。</small>`
+        : "この地点の用途地域を自動で調べられませんでした。";
+      guess.hidden = z === null;
+    }
+    syncDetail();
+  }
+  paint();
+  if (state.points.length >= 3) { await fetchZoning(); if (state.step === 4) paint(); }
 }
 
 // Step5
@@ -250,6 +307,7 @@ function compute(): boolean {
       polygon: localPolygon(), roadEdges, zone: state.zone,
       bcr: state.bcr ? Number(state.bcr) : undefined, far: state.far ? Number(state.far) : undefined,
       focusUse: state.focus || null,
+      zoneSource: state.zoneSource === "none" ? undefined : state.zoneSource,
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
@@ -262,7 +320,7 @@ function alertBox(msg: string) {
 }
 
 const yen = (man: number) => man >= 10000 ? `${(man / 10000).toFixed(man >= 100000 ? 0 : 1)}億` : `${man.toLocaleString("ja-JP")}万`;
-const CERT: Record<string, string> = { confirmed: "確認済み", reference: "参考（代表値）", unknown: "不明", user: "入力値" };
+const CERT: Record<string, string> = { confirmed: "確認済み", public: "公的データ（参考）", reference: "参考（代表値）", guess: "推定", unknown: "不明", user: "入力値" };
 
 function renderResult() {
   if (!result) return;
