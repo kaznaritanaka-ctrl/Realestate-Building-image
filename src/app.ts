@@ -311,10 +311,10 @@ async function renderZone() {
     const z = state.zoneApi;
     auto.classList.remove("muted-card");
     if (state.zoneSource === "user") {
-      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建蔽率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
+      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
-      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建蔽率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
+      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建ぺい率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
       guess.hidden = true;
     } else {
       auto.classList.add("muted-card");
@@ -383,7 +383,7 @@ function renderResult() {
       <table class="kv">
         <tr><th>敷地面積</th><td>約${s.area}㎡（約${(s.area / 3.30579).toFixed(1)}坪）<small>${CERT[result.certainty.shape]}</small></td></tr>
         <tr><th>用途地域</th><td>${esc(s.zone.label)}<small>${CERT[result.certainty.zone]}</small></td></tr>
-        <tr><th>建蔽率／容積率</th><td>${s.bcr}％／${s.far}％<small>${CERT[result.certainty.bcrFar]}</small></td></tr>
+        <tr><th>建ぺい率／容積率</th><td>${s.bcr}％／${s.far}％<small>${CERT[result.certainty.bcrFar]}</small></td></tr>
         <tr><th>前面道路</th><td>${s.roadWidth == null ? "なし" : s.roadWidth >= 12 ? "12m以上" : `約${s.roadWidth}m として計算`}<small>${CERT[result.certainty.road]}</small></td></tr>
         <tr><th>計算上の容積率</th><td>${s.farEffective}％${s.farEffective < s.far ? "（道路幅員による制限）" : ""}</td></tr>
         <tr><th>階数の上限（目安）</th><td>${s.floorsCap}階</td></tr>
@@ -401,7 +401,7 @@ function planHtml(p: Plan) {
     rows.push(["延床面積", `約${m.gfa}㎡（約${(m.gfa / 3.30579).toFixed(1)}坪）`]);
     rows.push(["建築面積", `約${m.footprint}㎡`]);
     rows.push(["階数・高さ", `${m.floors}階・約${m.height}m`]);
-    rows.push(["建蔽率／容積率の使用", `${m.bcrUsed}％／${m.farUsed}％`]);
+    rows.push(["建ぺい率／容積率の使用", `${m.bcrUsed}％／${m.farUsed}％`]);
   }
   if (m.units != null) rows.push(["賃貸住戸", `${m.units}戸（1K・約25㎡想定）`]);
   rows.push(["駐車", `${m.parking}台`]);

@@ -13,7 +13,7 @@ export interface SiteInput {
   /** 道路に接する辺（i番目の頂点→i+1番目の頂点）と幅員区分 */
   roadEdges: { index: number; width: RoadWidthClass }[];
   zone: ZoneKey;
-  /** 指定建蔽率・容積率（%）。分かる場合だけ上書き */
+  /** 指定建ぺい率・容積率（%）。分かる場合だけ上書き */
   bcr?: number;
   far?: number;
   /** 用途を1つに絞った場合、その用途の規模違い3案にする */
@@ -172,7 +172,7 @@ export function computePlans(input: SiteInput): EngineResult {
   const ctx: Ctx = { siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P, hasRoad: roadEdges.length > 0 };
 
   const ids = ["A", "B", "C"] as const;
-  const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建蔽率いっぱい" };
+  const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建ぺい率いっぱい" };
   let plans: Plan[];
   if (input.focusUse === "other" && zone.storeLimit === 0) {
     // 店舗がほぼ建てられない地域：規模違いではなく、活用方法違いの3案にする
@@ -297,7 +297,7 @@ function build(ctx: Ctx, use: UseKey, size: Size, zone: ZoneInfo): Plan {
 }
 
 /**
- * 「建蔽率いっぱい」の建物：1階は置ける最大の床（建蔽率と敷地形状の小さい方）、
+ * 「建ぺい率いっぱい」の建物：1階は置ける最大の床（建ぺい率と敷地形状の小さい方）、
  * 上の階は容積率の残りで、階数の上限まで積む。最上階が一部だけになる場合は奥寄せの小さい階を載せる
  */
 function maxMass(ctx: Ctx, rect: Rect, floorCap: number, kind: Box["kind"], fh: number, roof: Box["roof"]): Box[] {
@@ -348,7 +348,7 @@ function planHouse(ctx: Ctx, size: Size): Plan {
   const stalls = placeStalls(ctx, buildings, size === "max" ? 1 : 2);
   const gfa = gfaOf(buildings);
   if (gfa < 70 && buildings.length) notes.push("延床面積が70㎡未満です。間取りはかなり限られます。");
-  if (size === "max" && gfa > 250) notes.push("建蔽率・容積率いっぱいの規模です。二世帯住宅や店舗・事務所併用などの使い方が考えられます。");
+  if (size === "max" && gfa > 250) notes.push("建ぺい率・容積率いっぱいの規模です。二世帯住宅や店舗・事務所併用などの使い方が考えられます。");
   const floors = buildings.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
   return {
     id: "A", use: "house", title: "自宅（戸建）", subtitle: `${floors}階建て・延床約${Math.round(gfa)}㎡`,

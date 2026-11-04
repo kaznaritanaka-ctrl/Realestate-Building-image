@@ -15,7 +15,7 @@ test("10m×20m・第一種低層・前面4〜6m：容積率と3案の基本値",
   assert.ok(B.metrics.farUsed <= 100 + 0.1, `B far ${B.metrics.farUsed}`);
   assert.ok(B.metrics.bcrUsed <= 50 + 0.1, `B bcr ${B.metrics.bcrUsed}`);
   assert.equal(C.title, "C案：月極駐車場");
-  assert.equal(B.metrics.bcrUsed, 50); // 賃貸は建蔽率いっぱい // 一低は店舗不可
+  assert.equal(B.metrics.bcrUsed, 50); // 賃貸は建ぺい率いっぱい // 一低は店舗不可
   assert.ok(C.metrics.parking >= 3);
   assert.ok(A.metrics.parking >= 1, "戸建の手前に駐車1台以上");
 });
@@ -58,7 +58,7 @@ test("接道なしは警告を出す", () => {
 });
 
 for (const use of ["house", "rental"] as const) {
-  test(`${use}：小さめ＜中間＜建蔽率いっぱい、最大案は建蔽率の上限に達する`, () => {
+  test(`${use}：小さめ＜中間＜建ぺい率いっぱい、最大案は建ぺい率の上限に達する`, () => {
     const r = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: use });
     assert.deepEqual(r.plans.map(p => p.use), [use, use, use]);
     assert.deepEqual(r.plans.map(p => p.size), ["small", "mid", "max"]);
@@ -71,7 +71,7 @@ for (const use of ["house", "rental"] as const) {
   });
 }
 
-test("容積率が建蔽率の整数倍でないとき、最大案は上階を一部だけ載せる", () => {
+test("容積率が建ぺい率の整数倍でないとき、最大案は上階を一部だけ載せる", () => {
   // 一低 50/80 → 1階 100㎡、上に約60㎡
   const r = computePlans({ polygon: rect(10, 20), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1low", far: 80, focusUse: "house" });
   const m = r.plans[2];

@@ -6,7 +6,7 @@ export type ZoneKey =
 export interface ZoneInfo {
   key: ZoneKey;
   label: string;
-  bcr: number;          // 建蔽率（%）の代表値
+  bcr: number;          // 建ぺい率（%）の代表値
   far: number;          // 容積率（%）の代表値
   residential: boolean; // 住居系か（道路幅員による容積率低減の係数 0.4 / 0.6）
   lowRise: boolean;     // 低層系（絶対高さ10m/12m → 3階まで）

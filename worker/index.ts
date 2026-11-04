@@ -1,5 +1,5 @@
 // Worker：静的アセット配信＋API（/api/*）
-// /api/zoning?lat=&lng= … 不動産情報ライブラリ（国土交通省）XKT002 で、その地点の用途地域・建蔽率・容積率を返す
+// /api/zoning?lat=&lng= … 不動産情報ライブラリ（国土交通省）XKT002 で、その地点の用途地域・建ぺい率・容積率を返す
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   REINFOLIB_KEY?: string;
