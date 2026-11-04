@@ -140,3 +140,5 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .orient-mid .linklike { font-size: .76rem; }
 .orient-mid .linklike.off { visibility: hidden; }
 .orient .btn.small { box-shadow: none; white-space: nowrap; }
+.export { font-size: .88rem; }
+.export p { margin: 4px 0 8px; }

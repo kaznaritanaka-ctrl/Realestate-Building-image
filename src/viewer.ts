@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { EngineResult, Plan, Box } from "../engine/engine.ts";
 import { PlateauContext, FootprintContext, type ContextOptions, type FootprintBuilding } from "./context.ts";
+import { linearDepthMaterial, normalMaterial } from "./passes.ts";
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -16,6 +17,7 @@ export class Viewer {
   private context: PlateauContext | null = null;
   private footprints: FootprintContext | null = null;
   private contextKey = "";
+  private sitePoly: [number, number][] = [];
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -74,6 +76,78 @@ export class Viewer {
     this.footprints = new FootprintContext(buildings, origin, frame, site, this.scene);
   }
 
+  /** 視点を決めて、白模型・深度・法線・マスクを描画する（ControlNet用の制御画像の素材） */
+  renderPasses(view: "front" | "aerial", w = 1024, h = 768): { base: HTMLCanvasElement; depth: HTMLCanvasElement; normal: HTMLCanvasElement; mask: HTMLCanvasElement; camera: { position: number[]; target: number[]; fov: number; near: number; far: number; width: number; height: number } } {
+    const r = this.renderer, cam = this.camera;
+    const saved = { pos: cam.position.clone(), aspect: cam.aspect, near: cam.near, far: cam.far, target: this.controls.target.clone(), size: r.getSize(new THREE.Vector2()), pr: r.getPixelRatio(), bg: this.scene.background };
+    // 計画建物の範囲から視点を決める
+    const box = new THREE.Box3().setFromObject(this.planGroup);
+    if (box.isEmpty()) box.setFromObject(this.siteGroup.children[2] ?? this.siteGroup);
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const span = Math.max(sz.x, sz.z, 8), ht = Math.max(sz.y, 3);
+    const d = span * 1.45 + ht;
+    if (view === "front") cam.position.set(c.x + d * 0.45, Math.max(1.6, ht * 0.55), c.z + d * 0.95);   // 道路側から人の目線に近い高さ
+    else cam.position.set(c.x + d * 0.6, d * 0.85, c.z + d * 0.75);                                   // 斜め上から
+    const target = new THREE.Vector3(c.x, ht * 0.4, c.z);
+    cam.lookAt(target);
+    cam.aspect = w / h; cam.near = 0.5; cam.far = d * 4; cam.updateProjectionMatrix();
+    r.setPixelRatio(1); r.setSize(w, h, false);
+    const grab = () => { const cv = document.createElement("canvas"); cv.width = w; cv.height = h; cv.getContext("2d")!.drawImage(r.domElement, 0, 0, w, h); return cv; };
+
+    // 1) 白模型（影・周辺建物つき）
+    this.context?.update(r);
+    r.render(this.scene, cam);
+    const base = grab();
+    // 2) 深度（近いほど白）・3) 法線：シーン全体に上書きマテリアル
+    const dist = cam.position.distanceTo(target);
+    const near = Math.max(0.5, dist - span * 1.2), far = dist + span * 2.5;
+    const P = this.sitePoly;
+    const mats = { depth: [linearDepthMaterial(P, near, far, false), linearDepthMaterial(P, near, far, true)], normal: [normalMaterial(P, false), normalMaterial(P, true)] };
+    const ctxGroups = [this.context?.tiles.group, this.footprints?.group].filter(Boolean) as THREE.Object3D[];
+    const isCtx = (o: THREE.Object3D) => { for (let p: THREE.Object3D | null = o; p; p = p.parent) if (ctxGroups.includes(p)) return true; return false; };
+    const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = [];
+    const hideLines: THREE.Object3D[] = [];
+    this.scene.traverse(o => {
+      if ((o as THREE.Line).isLine && o.visible) { hideLines.push(o); o.visible = false; }
+      if ((o as THREE.Mesh).isMesh) swapped.push([o as THREE.Mesh, (o as THREE.Mesh).material]);
+    });
+    const apply = (kind: "depth" | "normal") => swapped.forEach(([m]) => { m.material = mats[kind][isCtx(m) ? 1 : 0]; });
+    this.scene.background = new THREE.Color(0x000000);
+    apply("depth"); r.render(this.scene, cam); const depth = grab();
+    this.scene.background = new THREE.Color(0x8080ff);
+    apply("normal"); r.render(this.scene, cam); const normal = grab();
+    swapped.forEach(([m, mat]) => { m.material = mat; });
+    [...mats.depth, ...mats.normal].forEach(m => m.dispose());
+    // 4) マスク：計画建物だけ白、それ以外は黒
+    this.scene.overrideMaterial = null;
+    const hidden: THREE.Object3D[] = [];
+    for (const ch of this.scene.children) if (ch !== this.planGroup && !(ch as THREE.Light).isLight && ch.visible) { hidden.push(ch); ch.visible = false; }
+    const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    this.scene.background = new THREE.Color(0x000000);
+    this.scene.overrideMaterial = white; r.render(this.scene, cam); const mask = grab();
+    // 元に戻す
+    this.scene.overrideMaterial = null;
+    hidden.forEach(o => (o.visible = true)); hideLines.forEach(o => (o.visible = true));
+    white.dispose();
+    this.scene.background = saved.bg;
+    const camera = { position: cam.position.toArray(), target: target.toArray(), fov: cam.fov, near: cam.near, far: cam.far, width: w, height: h };
+    cam.position.copy(saved.pos); cam.aspect = saved.aspect; cam.near = saved.near; cam.far = saved.far; cam.updateProjectionMatrix();
+    this.controls.target.copy(saved.target);
+    r.setPixelRatio(saved.pr); r.setSize(saved.size.x, saved.size.y, false);
+    this.renderer.domElement.style.width = "100%"; this.renderer.domElement.style.height = "100%";
+    return { base, depth, normal, mask, camera };
+  }
+
+  /** 計画建物と敷地を glTF（バイナリ）で書き出す */
+  async exportGlb(): Promise<ArrayBuffer> {
+    const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
+    const root = new THREE.Group();
+    root.add(this.planGroup.clone(true));
+    const site = this.siteGroup.children.find(o => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry.type === "ShapeGeometry");
+    if (site) root.add(site.clone());
+    return new Promise((resolve, reject) => new GLTFExporter().parse(root, (out) => resolve(out as ArrayBuffer), reject, { binary: true }));
+  }
+
   contextDebug() { return this.context?.debug ?? null; }
 
   dispose() { this.context?.dispose(this.scene); cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); this.el.innerHTML = ""; }
@@ -81,6 +155,7 @@ export class Viewer {
   setSite(res: EngineResult) {
     clear(this.siteGroup);
     const P = res.site.polygonUV;
+    this.sitePoly = P as [number, number][];
     const us = P.map(p => p[0]), vs = P.map(p => p[1]);
     const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
     const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), 10);

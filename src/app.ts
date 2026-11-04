@@ -4,6 +4,7 @@ import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
+import { exportControlPackage } from "./export.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -539,6 +540,33 @@ async function renderAd(use: UseKey) {
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+// 開発用：制御データの書き出し（URLに ?dev=1 を付けたときだけ表示）
+const DEV = new URLSearchParams(location.search).has("dev");
+$("#export-box").hidden = !DEV;
+$("#export-btn").addEventListener("click", async () => {
+  if (!result || !viewer) return;
+  const btn = $("#export-btn") as HTMLButtonElement, st = $("#export-status");
+  btn.disabled = true; st.textContent = "書き出しています…（数十秒かかります）";
+  const keep = activePlan;
+  try {
+    const plans = result.plans;
+    const blob = await exportControlPackage(viewer, result, plans, (i) => viewer!.setPlan(plans[i], result!.site.rotation), {
+      context: viewer.contextDebug() ? "plateau" : "footprints-or-none",
+      focus: state.focus || "compare", stage: state.stage, sample: !!state.sample,
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `tochi-mirai-control-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    st.textContent = `書き出しました（${(blob.size / 1024 / 1024).toFixed(1)}MB）`;
+  } catch (e) {
+    st.textContent = "書き出しに失敗しました：" + String(e).slice(0, 80);
+  } finally {
+    activePlan = keep; renderResult(); btn.disabled = false;
+  }
+});
 
 // 初期表示
 track("wizard_view", { mobile: matchMedia("(max-width: 760px)").matches });
