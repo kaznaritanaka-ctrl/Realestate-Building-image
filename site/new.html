@@ -20,13 +20,12 @@
 
 <div class="app">
   <aside class="panel" id="panel">
-    <ol class="stepper" id="stepper">
+    <ol class="stepper sticky" id="stepper">
       <li data-step="1">場所</li><li data-step="2">敷地</li><li data-step="3">道路</li><li data-step="4">法規制</li><li data-step="5">目的</li><li data-step="6">結果</li>
     </ol>
 
     <section class="wstep" data-step="1">
-      <h2>土地の場所を探す</h2>
-      <p class="hint">住所を入力して検索し、地図を土地の位置まで移動してください。地図をドラッグ・拡大して合わせることもできます。</p>
+      <h2>土地の場所を探す <button type="button" class="help" aria-label="説明" data-tip="住所を入力して検索し、地図を土地の位置まで移動してください。地図をドラッグ・拡大して合わせることもできます。">?</button></h2>
       <form id="search-form" class="row">
         <input id="search-q" type="search" placeholder="例：大阪府吹田市○○町1丁目" autocomplete="street-address" required>
         <button type="submit" class="btn">検索</button>
@@ -54,8 +53,7 @@
     </section>
 
     <section class="wstep" data-step="3" hidden>
-      <h2>道路に接している辺</h2>
-      <p class="hint">敷地の各辺について、道路に接しているかと道路の幅を選んでください。地図上の番号と対応しています。</p>
+      <h2>道路に接している辺 <button type="button" class="help" aria-label="説明" data-tip="敷地の各辺について、道路に接しているかと道路の幅を選んでください。番号は地図上の番号と対応しています。道路の幅で建てられる大きさが変わります。">?</button></h2>
       <ul id="edge-list" class="edges"></ul>
       <div class="actions">
         <button class="btn" data-next="2">戻る</button>
@@ -64,12 +62,11 @@
     </section>
 
     <section class="wstep" data-step="4" hidden>
-      <h2>この土地のルール（用途地域）</h2>
-      <p class="hint">建てられる建物の大きさは、土地ごとに決まっている「用途地域」「建蔽率」「容積率」で変わります。</p>
+      <h2>この土地のルール（用途地域） <button type="button" class="help" aria-label="説明" data-tip="建てられる建物の大きさは、土地ごとに決まっている「用途地域」「建蔽率」「容積率」で変わります。建蔽率＝敷地に対する建築面積の割合、容積率＝敷地に対する延床面積の割合です。">?</button></h2>
       <div id="zone-auto" class="card zone-auto">調べています…</div>
       <div id="zone-guess" hidden>
-        <p class="hint">周りの様子にいちばん近いものを選んでください。</p>
-        <fieldset class="choices" id="townfeel">
+        <fieldset class="choices grid2" id="townfeel">
+          <legend>周りの様子にいちばん近いもの</legend>
           <label><input type="radio" name="townfeel" value="r1low"> 戸建てが中心の静かな住宅街</label>
           <label><input type="radio" name="townfeel" value="r1mid"> マンションやお店も混じる住宅街</label>
           <label><input type="radio" name="townfeel" value="r1"> 大きな道路沿い・お店や事務所が多い</label>
@@ -79,14 +76,11 @@
         </fieldset>
       </div>
       <details class="card" id="zone-detail">
-        <summary>正確な値を自分で指定する</summary>
-        <p class="hint">自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。</p>
-        <label class="field">用途地域
-          <select id="zone"></select>
-        </label>
-        <div class="row two">
-          <label class="field">建蔽率（%）<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
-          <label class="field">容積率（%）<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
+        <summary>正確な値を自分で指定する <button type="button" class="help" aria-label="説明" data-tip="自治体の「都市計画図」（「○○市 都市計画図」で検索）で確認できます。">?</button></summary>
+        <div class="row three">
+          <label class="field grow">用途地域<select id="zone"></select></label>
+          <label class="field">建蔽率％<input id="bcr" type="number" min="10" max="100" step="10" placeholder="代表値"></label>
+          <label class="field">容積率％<input id="far" type="number" min="50" max="1300" step="10" placeholder="代表値"></label>
         </div>
       </details>
       <div class="actions">
@@ -97,15 +91,15 @@
 
     <section class="wstep" data-step="5" hidden>
       <h2>どう使いたいですか</h2>
-      <fieldset class="choices" id="focus">
-        <legend>使い道</legend>
+      <fieldset class="choices grid2" id="focus">
+        <legend>使い道 <button type="button" class="help" aria-label="説明" data-tip="使い道を選ぶと「小さめ・中間・建蔽率いっぱい」の3案を出します。決めていない場合は、自宅・賃貸・その他活用の3つを比べます。">?</button></legend>
         <label><input type="radio" name="focus" value="house" checked> 自宅を建てたい</label>
         <label><input type="radio" name="focus" value="rental"> 賃貸経営（アパート・賃貸併用）</label>
         <label><input type="radio" name="focus" value="other"> 店舗・駐車場などの活用</label>
         <label><input type="radio" name="focus" value=""> まだ決めていない（3つの使い道を比べる）</label>
-        <p class="hint small-hint">使い道を選ぶと「小さめ・中間・建蔽率いっぱい」の3案を出します。</p>
+
       </fieldset>
-      <fieldset class="choices" id="stage">
+      <fieldset class="choices grid2" id="stage">
         <legend>検討の段階</legend>
         <label><input type="radio" name="stage" value="own"> 土地を持っている（相続・空き地・建替え）</label>
         <label><input type="radio" name="stage" value="buying"> 土地の購入を検討中</label>
