@@ -373,7 +373,7 @@ function planHtml(p: Plan) {
   </div>`;
 }
 
-const CREDIT = "出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。";
+const CREDIT = `出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。`;
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 // 初期表示
