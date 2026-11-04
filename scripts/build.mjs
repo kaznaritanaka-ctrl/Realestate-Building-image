@@ -12,4 +12,8 @@ await build({
   legalComments: "linked",
   logLevel: "info",
 });
+await build({
+  entryPoints: ["src/lp.ts"], bundle: true, minify: true, format: "iife", target: ["es2020"],
+  outfile: "site/assets/lp.js", logLevel: "info",
+});
 copyFileSync("node_modules/maplibre-gl/dist/maplibre-gl.css", "site/assets/maplibre-gl.css");

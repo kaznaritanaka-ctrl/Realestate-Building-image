@@ -6,9 +6,12 @@
   "assets": {
     "directory": "./site",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/go/*"]
   },
   "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "realestate-db", "database_id": "2a185765-498e-483f-a518-efb83fc4d707", "migrations_dir": "migrations" }
+  ],
   "routes": [
     { "pattern": "realestate.ai-investment-research.net", "custom_domain": true }
   ]

@@ -1,9 +1,22 @@
 // Worker：静的アセット配信＋API（/api/*）
 // /api/zoning?lat=&lng= … 不動産情報ライブラリ（国土交通省）XKT002 で、その地点の用途地域・建ぺい率・容積率を返す
+import { AD_SLOTS } from "./affiliates.ts";
+
+interface D1 {
+  prepare(sql: string): { bind(...v: unknown[]): { run(): Promise<unknown> } };
+}
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   REINFOLIB_KEY?: string;
+  DB?: D1;
 }
+
+// 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
+const EVENT_NAMES = new Set([
+  "lp_view", "wizard_view", "step_enter", "located", "shape_done", "road_set", "zone_resolved",
+  "run", "plan_tab", "sample_used", "ad_impression", "restart",
+]);
+const PROP_KEYS = new Set(["step", "via", "areaBucket", "edges", "roads", "source", "zone", "focus", "stage", "plan", "size", "use", "ref", "mobile"]);
 
 const Z = 15;
 
@@ -11,6 +24,9 @@ export default {
   async fetch(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/api/zoning") return zoning(url, env, ctx);
+    if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
+    if (url.pathname === "/api/ads") return json({ slots: AD_SLOTS.filter(s => s.url).map(({ slot, use, advertiser, text }) => ({ slot, use, advertiser, text })) });
+    if (url.pathname.startsWith("/go/")) return go(url, env, ctx);
     if (url.pathname.startsWith("/api/")) return json({ error: "not_found" }, 404);
     return env.ASSETS.fetch(req);
   },
@@ -89,4 +105,36 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" },
   });
+}
+
+const SID_RE = /^[a-f0-9]{16,32}$/;
+
+async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  const text = await req.text();
+  if (text.length > 2000) return new Response(null, { status: 413 });
+  let body: { sid?: string; name?: string; props?: Record<string, unknown> };
+  try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
+  if (!body.sid || !SID_RE.test(body.sid) || !body.name || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
+  const props: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(body.props ?? {})) {
+    if (!PROP_KEYS.has(k)) continue;
+    if (typeof v === "number" || typeof v === "boolean") props[k] = v;
+    else if (typeof v === "string") props[k] = v.slice(0, 40);
+  }
+  if (env.DB) {
+    ctx.waitUntil(env.DB.prepare("INSERT INTO events (sid, name, props) VALUES (?, ?, ?)").bind(body.sid, body.name, JSON.stringify(props)).run().catch(() => {}));
+  }
+  return new Response(null, { status: 204 });
+}
+
+async function go(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  const slot = url.pathname.slice(4);
+  const ad = AD_SLOTS.find(s => s.slot === slot && s.url);
+  if (!ad) return Response.redirect(`${url.origin}/new.html`, 302);
+  const sid = url.searchParams.get("sid");
+  if (env.DB) {
+    ctx.waitUntil(env.DB.prepare("INSERT INTO affiliate_clicks (sid, slot, use_key) VALUES (?, ?, ?)")
+      .bind(sid && SID_RE.test(sid) ? sid : null, ad.slot, ad.use).run().catch(() => {}));
+  }
+  return new Response(null, { status: 302, headers: { location: ad.url, "cache-control": "no-store", "referrer-policy": "no-referrer-when-downgrade" } });
 }

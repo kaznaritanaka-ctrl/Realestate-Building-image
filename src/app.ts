@@ -3,6 +3,7 @@ import { computePlans, type EngineResult, type RoadWidthClass, type UseKey, type
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer } from "./viewer.ts";
+import { track, areaBucket, SID } from "./track.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -72,7 +73,7 @@ map.on("load", () => {
 const MIN_DRAW_ZOOM = 16;
 const zoomWarn = () => { $("#zoom-warn").hidden = !(state.step === 2 && map.getZoom() < MIN_DRAW_ZOOM); };
 map.on("zoomend", zoomWarn);
-map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); } });
+map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); track("located", { via: "move" }); } });
 
 map.on("click", (e) => {
   if (state.step !== 2) return;
@@ -139,7 +140,11 @@ let result: EngineResult | null = null;
 let activePlan = 0;
 
 function go(step: number) {
+  const from = state.step;
   if (step === 6 && !compute()) return;
+  track("step_enter", { step });
+  if (from === 2 && step === 3 && state.points.length >= 3) track("shape_done", { areaBucket: areaBucket(area(localPolygon())), edges: state.points.length });
+  if (from === 3 && step === 4) track("road_set", { roads: state.edges.filter(e => e !== "none").length });
   state.step = step; save();
   $$("section.wstep").forEach(s => (s.hidden = Number(s.dataset.step) !== step));
   paintStepper();
@@ -206,7 +211,7 @@ $("#search-form").addEventListener("submit", async (e) => {
     for (const d of data.slice(0, 8)) {
       const li = document.createElement("li");
       const b = document.createElement("button"); b.type = "button"; b.className = "linklike"; b.textContent = d.properties.title;
-      b.addEventListener("click", () => { map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 }); ul.innerHTML = ""; state.located = true; save(); paintStepper(); });
+      b.addEventListener("click", () => { map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 }); ul.innerHTML = ""; state.located = true; save(); paintStepper(); track("located", { via: "search" }); });
       li.appendChild(b); ul.appendChild(li);
     }
   } catch {
@@ -222,14 +227,14 @@ $("#sample-btn").addEventListener("click", () => {
   state.points = local.map(([x, y]) => [c[0] + x * dLng, c[1] + y * dLat]);
   state.edges = ["4to6", "none", "none", "none"];
   state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true; state.zoneSource = "guess"; state.located = true; state.purposeSet = true;
-  save(); go(6);
+  save(); track("sample_used"); go(6);
 });
 
 $("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#restart-btn").addEventListener("click", () => {
   Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null });
-  result = null; save(); go(1);
+  result = null; save(); track("restart"); go(1);
 });
 
 let photo = true;
@@ -279,6 +284,7 @@ async function fetchZoning() {
     state.zoneApi = r.ok ? await r.json() : { available: false };
   } catch { state.zoneApi = { available: false }; }
   const z = state.zoneApi!;
+  track("zone_resolved", { source: !z.available ? "unavailable" : z.found ? "api" : "notfound" });
   if (z.available && z.found && state.zoneSource !== "user") {
     state.zone = (z.zoneName && ZONE_BY_NAME.get(z.zoneName)) || "unknown";
     state.bcr = z.bcr != null ? String(z.bcr) : ""; state.far = z.far != null ? String(z.far) : "";
@@ -304,6 +310,7 @@ async function renderZone() {
   bcr.onchange = far.onchange = () => paint();
   $$<HTMLInputElement>("input[name=townfeel]").forEach(r => (r.onchange = () => {
     state.zone = r.value as ZoneKey; state.bcr = ""; state.far = ""; state.zoneSource = "guess"; save(); paint();
+    track("zone_resolved", { source: "guess", zone: state.zone });
   }));
 
   function paint() {
@@ -351,6 +358,7 @@ function compute(): boolean {
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
+  track("run", { focus: state.focus || "compare", stage: state.stage, zone: state.zone, source: state.zoneSource, areaBucket: areaBucket(result.site.area), roads: roadEdges.length });
   return true;
 }
 
@@ -371,12 +379,13 @@ function renderResult() {
     const b = document.createElement("button"); b.type = "button"; b.role = "tab"; b.className = "tab" + (i === activePlan ? " active" : "");
     const label = p.size ? p.title.replace(/^[ABC]案：/, "") : p.title.replace(/^[ABC]案：/, "");
     b.innerHTML = `<b>${p.id}案</b><span>${esc(label)}</span>`;
-    b.addEventListener("click", () => { activePlan = i; renderResult(); });
+    b.addEventListener("click", () => { activePlan = i; renderResult(); track("plan_tab", { plan: p.id, size: p.size, use: p.use }); });
     tabs.appendChild(b);
   });
   const p = result.plans[activePlan];
   viewer.setPlan(p);
   $("#plan-detail").innerHTML = planHtml(p);
+  renderAd(p.use);
   const s = result.site;
   $("#site-summary").innerHTML = `
     <details class="card"><summary>敷地と前提条件</summary>
@@ -414,9 +423,26 @@ function planHtml(p: Plan) {
 }
 
 const CREDIT = `出典：国土交通省 不動産情報ライブラリ（<a href="https://www.reinfolib.mlit.go.jp/" target="_blank" rel="noopener">https://www.reinfolib.mlit.go.jp/</a>）。「都市計画決定GISデータ（用途地域）」（国土交通省）をもとに土地の未来図が規模を試算。提供情報の最新性、正確性、完全性等が保証されたものではありません。地域の範囲は概ねの位置を示すもので、実際の都市計画の決定範囲と異なる場合があります。`;
+// 広告枠：ASP承認後に worker/affiliates.ts に URL を入れると表示される
+interface AdSlotPub { slot: string; use: UseKey; advertiser: string; text: string }
+let adSlots: AdSlotPub[] | null = null;
+const adShown = new Set<string>();
+async function renderAd(use: UseKey) {
+  const box = $("#ad-box");
+  if (adSlots === null) {
+    try { adSlots = (await (await fetch("/api/ads")).json()).slots ?? []; } catch { adSlots = []; }
+  }
+  const ad = adSlots!.find(a => a.use === use);
+  if (!ad) { box.innerHTML = ""; return; }
+  box.innerHTML = `<a class="ad" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}" target="_blank" rel="sponsored noopener">
+    <span class="pr">PR</span><b>${esc(ad.text)}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。画像・3Dの表示は申込みの有無にかかわらず無料です。</small>` : ""}</a>`;
+  if (!adShown.has(ad.slot)) { adShown.add(ad.slot); track("ad_impression", { use }); }
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 // 初期表示
+track("wizard_view", { mobile: matchMedia("(max-width: 760px)").matches });
 syncRadios();
 const params = new URLSearchParams(location.search);
 if (params.has("sample")) $("#sample-btn").click();

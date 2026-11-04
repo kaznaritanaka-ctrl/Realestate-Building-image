@@ -96,3 +96,6 @@ footer.site nav a { color: var(--ink-soft); margin-right: 1.2em; }
   .hero { padding-top: 48px; padding-bottom: 40px; }
   .info-table th { width: 38%; }
 }
+
+.hero-note { margin-top: 1.2em; font-size: .85rem; color: var(--ink-soft); }
+footer.site nav a { display: inline-block; margin-bottom: 4px; }

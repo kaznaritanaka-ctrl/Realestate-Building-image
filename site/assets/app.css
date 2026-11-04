@@ -121,3 +121,9 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
   .stepper button { flex-direction: column; gap: 1px; padding: 3px 4px; font-size: .68rem; }
 }
 .app-body header.site { position: sticky; top: 0; z-index: 20; }
+
+.ad { display: block; text-decoration: none; color: var(--ink); background: #fff; border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+.ad:hover { background: var(--accent-soft); }
+.ad .pr { display: inline-block; font-size: .7rem; font-weight: 700; color: #fff; background: #8a8f8c; border-radius: 4px; padding: 0 6px; margin-right: 6px; vertical-align: 1px; }
+.ad b { color: var(--accent); }
+.ad small { display: block; color: var(--ink-soft); font-size: .76rem; margin-top: 4px; }
