@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>土地の未来図｜AI建築イメージ生成</title>
+<meta name="description" content="土地の情報から、建てた後の姿を3つの案で見られる無料サービス。自宅・賃貸併用・店舗など用途別の建築イメージをAIで生成します（現在開発中）。">
+<meta property="og:title" content="土地の未来図｜AI建築イメージ生成">
+<meta property="og:description" content="土地の情報から、建てた後の姿を3つの案で。無料の建築イメージ生成サービス（開発中）。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://realestate.ai-investment-research.net/">
+<meta property="og:image" content="https://realestate.ai-investment-research.net/assets/sample-b.svg">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="/">土地の未来図<small>AI建築イメージ生成</small></a>
+    <nav class="site" aria-label="ページ内リンク">
+      <a href="#how">使い方</a>
+      <a href="#samples">サンプル</a>
+      <a href="#status">開発状況</a>
+      <a href="#caution">注意事項</a>
+      <a href="#operator">運営者</a>
+    </nav>
+  </div>
+</header>
+<div class="status-bar">現在開発中です。サービスの公開まで、もうしばらくお待ちください。</div>
+
+<main>
+  <div class="wrap hero">
+    <span class="pill">無料・公開準備中</span>
+    <h1>この土地に建てたら、<br>どんな姿になる？</h1>
+    <p class="lead">土地の場所・形・使い道を入力すると、AIが建築イメージを<strong>3つの案</strong>で作ります。自宅・賃貸併用・店舗など、使い道ごとの違いを比べて、土地の可能性を考えるきっかけにしてください。</p>
+    <a class="cta" aria-disabled="true">公開準備中</a>
+  </div>
+
+  <section id="about">
+    <div class="wrap">
+      <h2><span class="num">01</span>サービス概要</h2>
+      <p>「土地の未来図」は、土地の情報から建築イメージを3案生成する無料のWebサービスです。更地や古家付きの土地を見ても、建てた後の姿はなかなか想像できません。設計の知識がなくても、使い道ごとの完成イメージを手軽に比べられるようにすることを目指しています。</p>
+      <p>生成したイメージに加えて、建物の規模（階数や延床面積の目安）なども、参考情報として表示できるよう準備しています。</p>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <h2><span class="num">02</span>利用イメージ</h2>
+      <div class="steps">
+        <div class="step">
+          <h3>土地を入力</h3>
+          <p>所在地を地図で確認し、土地のおおよその形と、使い道（自宅・賃貸・店舗など）を選びます。</p>
+        </div>
+        <div class="step">
+          <h3>AIが3案を生成</h3>
+          <p>3Dで建物の形をつくり、AIで外観を仕上げます。1件あたり10分ほどかかる見込みです。</p>
+        </div>
+        <div class="step">
+          <h3>メールで完成通知</h3>
+          <p>生成が終わったら、登録したメールアドレスに閲覧用のURLをお送りします。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="samples">
+    <div class="wrap">
+      <h2><span class="num">03</span>サンプル</h2>
+      <div class="samples">
+        <figure class="sample">
+          <img src="/assets/sample-a.svg" alt="A案：2階建て切妻屋根の戸建住宅の概形イメージ" width="800" height="570">
+          <figcaption><b>A案：自宅（戸建）</b><span>2階建て・切妻屋根</span></figcaption>
+        </figure>
+        <figure class="sample">
+          <img src="/assets/sample-b.svg" alt="B案：3階建ての賃貸併用住宅の概形イメージ" width="800" height="570">
+          <figcaption><b>B案：賃貸併用・アパート</b><span>3階建て・住戸＋オーナー住居</span></figcaption>
+        </figure>
+        <figure class="sample">
+          <img src="/assets/sample-c.svg" alt="C案：平屋店舗と駐車場の概形イメージ" width="800" height="570">
+          <figcaption><b>C案：店舗・その他活用</b><span>平屋店舗＋駐車場</span></figcaption>
+        </figure>
+      </div>
+      <p class="note">※上の図は、3案の違いを説明するための概形イメージです。Blender（3D）とComfyUI（画像生成AI）で作成した実際の生成例に、順次差し替えます。実在の土地・建物を表したものではありません。</p>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="wrap">
+      <h2><span class="num">04</span>開発状況</h2>
+      <ul class="status-list">
+        <li class="done">サービス設計（使い道別3案・非同期生成・メール通知）</li>
+        <li class="wip">3Dモデルと画像生成AIを組み合わせた生成パイプラインの検証</li>
+        <li class="wip">土地の形・規模を崩さずに3案を出すための品質検証</li>
+        <li class="todo">入力画面・メール通知・結果ページの実装</li>
+        <li class="todo">小規模な公開（無料・件数制限あり）</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="caution">
+    <div class="wrap">
+      <h2><span class="num">05</span>注意事項</h2>
+      <div class="caution">
+        <ul>
+          <li>生成される画像・数値は<strong>参考イメージ</strong>です。実際の設計図・見積もりではありません。</li>
+          <li>その土地に実際に建築できること、法令（用途地域・建蔽率・容積率・斜線制限・接道など）に適合することを<strong>保証するものではありません</strong>。</li>
+          <li>土地の境界・面積・形状は、入力内容や公開データに基づく概算です。正確な情報は、登記・測量・行政窓口や専門家にご確認ください。</li>
+          <li>建築・購入・売却などのご判断は、建築士・不動産会社などの専門家にご相談のうえ、ご自身の責任で行ってください。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="operator">
+    <div class="wrap">
+      <h2><span class="num">06</span>運営者情報</h2>
+      <table class="info-table">
+        <tr><th>サービス名</th><td>土地の未来図｜AI建築イメージ生成</td></tr>
+        <tr><th>運営者</th><td>【要記入：運営者名（個人事業主名または屋号）】</td></tr>
+        <tr><th>関連サイト</th><td><a href="https://ai-investment-research.net/">AI Investment Research</a></td></tr>
+        <tr><th>お問い合わせ</th><td>【要記入：問い合わせ用メールアドレスまたはフォームURL】</td></tr>
+        <tr><th>各種方針</th><td><a href="/privacy.html">プライバシーポリシー</a> ／ <a href="/ad-policy.html">広告掲載方針</a></td></tr>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <nav><a href="/privacy.html">プライバシーポリシー</a><a href="/ad-policy.html">広告掲載方針</a><a href="/#operator">運営者情報</a></nav>
+    <p>© 2026 土地の未来図</p>
+  </div>
+</footer>
+</body>
+</html>
