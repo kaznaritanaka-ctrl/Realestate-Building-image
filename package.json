@@ -12,8 +12,10 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@mapbox/vector-tile": "^2.0.5",
     "3d-tiles-renderer": "^0.5.4",
     "maplibre-gl": "^5.24.0",
+    "pbf": "^4.0.2",
     "three": "^0.187.0"
   }
 }
