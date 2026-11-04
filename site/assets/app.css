@@ -38,7 +38,7 @@ input, select { font: inherit; padding: 9px 10px; border: 1px solid var(--line);
 .edges li.muted { display: block; }
 .edges li { display: grid; grid-template-columns: 44px 60px 1fr; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
 .edge-no { font-weight: 700; }
-.vtx { width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+.vtx { cursor: grab; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
 .edge-label { min-width: 22px; height: 22px; border-radius: 11px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
 .edge-label.road { background: #e2572c; color: #fff; }
 
@@ -110,3 +110,4 @@ details.card { padding: 10px 14px; }
 /* LP用の section スタイルを打ち消す */
 section.wstep { padding: 0; border-top: 0; }
 section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
+.vtx:active { cursor: grabbing; }

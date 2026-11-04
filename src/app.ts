@@ -81,17 +81,27 @@ map.on("click", (e) => {
 
 function fc(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection { return { type: "FeatureCollection", features }; }
 
-function redrawMap() {
+function drawShape() {
   const pts = state.points;
   const feats: GeoJSON.Feature[] = [];
   if (pts.length >= 3) feats.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [[...pts, pts[0]]] } });
   else if (pts.length === 2) feats.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts } });
   (map.getSource("draw") as maplibregl.GeoJSONSource | undefined)?.setData(fc(feats));
+}
+
+function redrawMap() {
+  const pts = state.points;
+  drawShape();
 
   vertexMarkers.forEach(m => m.remove());
   vertexMarkers = state.step === 2 ? pts.map((p, i) => {
-    const el = document.createElement("div"); el.className = "vtx"; el.title = `頂点${i + 1}`;
-    return new maplibregl.Marker({ element: el }).setLngLat(p).addTo(map);
+    const el = document.createElement("div"); el.className = "vtx"; el.title = `頂点${i + 1}（ドラッグで移動）`;
+    const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(p).addTo(map);
+    // ドラッグ中は形だけ描き直し、離したときに保存と面積更新
+    m.on("drag", () => { const ll = m.getLngLat(); state.points[i] = [ll.lng, ll.lat]; drawShape(); updateArea(); });
+    m.on("dragend", () => { save(); });
+    el.addEventListener("click", (ev) => ev.stopPropagation());
+    return m;
   }) : [];
 
   const edgeFeats: GeoJSON.Feature[] = [];
