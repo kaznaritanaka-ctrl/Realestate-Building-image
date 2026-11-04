@@ -1,6 +1,10 @@
 // 周辺建物（PLATEAU 3D Tiles）を、エンジンの (u,v) 座標系に重ねて表示する
 import * as THREE from "three";
 import { TilesRenderer, WGS84_ELLIPSOID } from "3d-tiles-renderer";
+import { GLTFExtensionsPlugin } from "3d-tiles-renderer/plugins";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import type { Vec2 } from "../engine/geom.ts";
 
 export interface ContextOptions {
@@ -20,12 +24,16 @@ export class PlateauContext {
   private material: THREE.MeshLambertMaterial;
   private center: THREE.Vector2;
   private models = 0;
-  readonly debug: { models: number; samples: number; ground: number | null; errors: number } = { models: 0, samples: 0, ground: null, errors: 0 };
+  readonly debug: { models: number; samples: number; ground: number | null; errors: number; lastError?: string } = { models: 0, samples: 0, ground: null, errors: 0 };
   onStatus: (s: "loading" | "ready" | "error") => void = () => {};
 
   constructor(private opts: ContextOptions, private camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, parent: THREE.Object3D) {
     this.tiles = new TilesRenderer(opts.tilesetUrl);
     this.tiles.errorTarget = 12;
+    // PLATEAUのタイルは圧縮（Draco等）・RTC座標を使うことがあるため、デコーダーを登録する
+    const draco = new DRACOLoader().setDecoderPath("/assets/draco/");
+    const ktx2 = new KTX2Loader().setTranscoderPath("/assets/basis/").detectSupport(renderer);
+    this.tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, ktxLoader: ktx2, meshoptDecoder: MeshoptDecoder, rtc: true, metadata: false }));
     this.tiles.setCamera(camera);
     this.tiles.setResolutionFromRenderer(camera, renderer);
 
@@ -87,6 +95,7 @@ bool insideSite(vec2 p) {
     this.tiles.addEventListener("tiles-load-end", () => this.onStatus("ready"));
     this.tiles.addEventListener("load-error", ((e: { error?: unknown; url?: string }) => {
       this.debug.errors++;
+      if (!this.debug.lastError) this.debug.lastError = String((e.error as Error)?.message ?? e.error ?? "").slice(0, 120);
       console.warn("[plateau] load-error", e.url, e.error);
       this.onStatus("error");
     }) as never);
