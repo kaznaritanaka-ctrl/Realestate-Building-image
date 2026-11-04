@@ -466,7 +466,7 @@ async function renderContext(res: EngineResult) {
     if (token !== contextToken) return;
     const p = box.querySelector(".status");
     const d = viewer?.contextDebug();
-    const dbg = d ? `（タイル${d.models}・地面${d.ground ?? "推定中"}${d.errors ? `・エラー${d.errors}` : ""}）` : "";
+    const dbg = d ? `（タイル${d.models}・地面${d.ground ?? "推定中"}${d.errors ? `・エラー${d.errors}：${d.lastError ?? ""}` : ""}）` : "";
     if (p) p.textContent = (st === "loading" ? "周りの建物を読み込んでいます…" : st === "ready" ? "周りの既存の建物をグレーで表示しています（敷地内の建物は非表示）。" : "一部の建物を読み込めませんでした。") + dbg;
   });
 }
