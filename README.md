@@ -12,11 +12,13 @@
 - `assets/` — CSS、サンプル概形イメージ（SVG。生成例ができたら差し替え）
 - `_headers` — Cloudflare Pages 用のセキュリティヘッダ（JavaScriptなし前提のCSP）
 
-### デプロイ（Cloudflare Pages）
+### デプロイ（Cloudflare Workers Static Assets）
 
-1. Cloudflare ダッシュボード → Workers & Pages → 作成 → Pages → Git に接続 → このリポジトリ
-2. ビルドコマンド：なし ／ ビルド出力ディレクトリ：`site`
-3. カスタムドメインに `realestate.ai-investment-research.net` を追加（同一ゾーンならDNSは自動）
-4. 投資系（AI Investment Research）とは別の Pages プロジェクトにする
+既存の ai-investment-* と同じく Workers で運用する。設定は `wrangler.jsonc`（Worker名 `realestate-site`、カスタムドメイン `realestate.ai-investment-research.net` を宣言済み）。
+
+1. Cloudflare ダッシュボード → Workers & Pages → 作成 → 「リポジトリをインポート」→ このリポジトリ
+2. ビルドコマンド：なし ／ デプロイコマンド：`npx wrangler deploy`（既定のまま）
+3. 以後 `main` への push で自動デプロイ
+4. 投資系とは別 Worker・別シークレットで運用する
 
 公開前に `index.html` の【要記入】（運営者名・問い合わせ先）を埋めること。

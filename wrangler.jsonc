@@ -1,0 +1,11 @@
+{
+  // 公開準備中の静的サイト（Workers Static Assets）
+  "name": "realestate-site",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site"
+  },
+  "routes": [
+    { "pattern": "realestate.ai-investment-research.net", "custom_domain": true }
+  ]
+}
