@@ -142,3 +142,15 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .orient .btn.small { box-shadow: none; white-space: nowrap; }
 .export { font-size: .88rem; }
 .export p { margin: 4px 0 8px; }
+
+/* 市街化調整区域の警告・参考情報カード */
+.control-card { background: #fff4ec; border-color: #e7a77c; color: #6b3414; font-size: .9rem; line-height: 1.7; }
+.control-card .control-note { margin: 0 0 10px; padding-bottom: 10px; border-bottom: 1px dashed #e7a77c; }
+#area-warn { margin-bottom: 12px; }
+.siteinfo .kv th { width: 9.5em; }
+.siteinfo .kv tr.attn td { color: var(--warn); }
+.siteinfo .kv td small { display: block; color: var(--ink-soft); font-size: .76rem; margin-top: 2px; }
+.siteinfo p.small { font-size: .78rem; margin: 8px 0 0; }
+.siteinfo .kv td { font-weight: 400; }
+.siteinfo .kv td small { background: none; padding: 0; margin-left: 0; border-radius: 0; }
+.siteinfo .si-item + .si-item { margin-top: 6px; }

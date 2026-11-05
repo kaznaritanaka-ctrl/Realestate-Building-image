@@ -5,6 +5,7 @@ import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
+import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -320,7 +321,7 @@ async function renderZone() {
   function paint() {
     paintStepper();
     const z = state.zoneApi;
-    auto.classList.remove("muted-card");
+    auto.classList.remove("muted-card", "control-card");
     if (state.zoneSource === "user") {
       auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
@@ -334,10 +335,41 @@ async function renderZone() {
         : "この地点の用途地域を自動で調べられませんでした。";
       guess.hidden = z === null;
     }
+    if (areaClass(siteInfo) === "control") {
+      auto.classList.remove("muted-card"); auto.classList.add("control-card");
+      auto.insertAdjacentHTML("afterbegin", `<p class="control-note">${CONTROL_WARNING}</p>`);
+    }
     syncDetail();
   }
   paint();
-  if (state.points.length >= 3) { await fetchZoning(); if (state.step === 4) paint(); }
+  if (state.points.length >= 3) {
+    loadSiteInfo().then(() => { if (state.step === 4) paint(); });
+    await fetchZoning(); if (state.step === 4) paint();
+  }
+}
+
+// 地点の参考情報（区域区分・防火・ハザード・地価・駅）。座標だけで照会する
+let siteInfo: SiteInfo | null = null;
+let siteInfoKey = "";
+async function loadSiteInfo(): Promise<SiteInfo> {
+  const c = centroid();
+  const key = `${c[0].toFixed(4)},${c[1].toFixed(4)}`;
+  if (key !== siteInfoKey) { siteInfoKey = key; siteInfo = null; }
+  const si = await fetchSiteInfo(c[0], c[1]);
+  if (key === siteInfoKey && siteInfo !== si) {
+    siteInfo = si;
+    track("site_info", { area: areaClass(si) });
+  }
+  return si;
+}
+
+function paintSiteInfo() {
+  if (!result) return;
+  const ctrl = areaClass(siteInfo) === "control";
+  const warn = $("#area-warn");
+  warn.hidden = !ctrl;
+  warn.innerHTML = ctrl ? CONTROL_WARNING : "";
+  $("#site-info-box").innerHTML = siteInfoHtml(siteInfo, result.site.area);
 }
 
 // Step5
@@ -393,6 +425,8 @@ function renderResult() {
   paintOrient();
   $("#plan-detail").innerHTML = planHtml(p);
   renderAd(p.use);
+  if (state.sample) { $("#site-info-box").hidden = true; $("#area-warn").hidden = true; }
+  else { $("#site-info-box").hidden = false; const pr = loadSiteInfo(); paintSiteInfo(); pr.then(() => paintSiteInfo()); }
   const s = result.site;
   $("#site-summary").innerHTML = `
     <details class="card"><summary>敷地と前提条件</summary>
