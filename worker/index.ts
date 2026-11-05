@@ -2,6 +2,7 @@
 // /api/zoning?lat=&lng= … 不動産情報ライブラリ（国土交通省）XKT002 で、その地点の用途地域・建ぺい率・容積率を返す
 import { AD_SLOTS } from "./affiliates.ts";
 import { gsiBuildings } from "./gsi-buildings.ts";
+import { siteInfo } from "./site-info.ts";
 
 interface D1 {
   prepare(sql: string): { bind(...v: unknown[]): { run(): Promise<unknown> } };
@@ -28,6 +29,7 @@ export default {
     if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
     if (url.pathname === "/api/plateau") return plateau(url, ctx);
     if (url.pathname === "/api/buildings") return buildings(url, ctx);
+    if (url.pathname === "/api/site-info") return siteInfoRoute(url, env, ctx);
     if (url.pathname === "/api/ads") return json({ slots: AD_SLOTS.filter(s => s.url).map(({ slot, use, advertiser, text }) => ({ slot, use, advertiser, text })) });
     if (url.pathname.startsWith("/go/")) return go(url, env, ctx);
     if (url.pathname.startsWith("/api/")) return json({ error: "not_found" }, 404);
@@ -214,4 +216,27 @@ async function buildings(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => vo
   } catch (e) {
     return json({ buildings: [], error: String(e).slice(0, 200) });
   }
+}
+
+// 地点の法規制・ハザード・周辺情報（不動産情報ライブラリ。タイル単位で1日キャッシュ）
+async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 20 || lat > 46 || lng < 122 || lng > 154) return json({ error: "bad_request" }, 400);
+  if (!env.REINFOLIB_KEY) return json({ available: false, reason: "not_configured" });
+  const only = url.searchParams.get("only")?.split(",").filter(Boolean);
+  const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
+  const fetchJson = async (api: string) => {
+    const k = new Request(`https://cache.internal/reinfolib/${encodeURIComponent(api.split("/external/")[1])}`);
+    let r = await cache.match(k);
+    if (!r) {
+      const up = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY! } });
+      if (up.status !== 200) return { status: up.status, body: null };
+      r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
+      ctx.waitUntil(cache.put(k, r.clone()));
+    }
+    try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
+  };
+  const info = await siteInfo(lat, lng, fetchJson, only);
+  console.log(JSON.stringify({ evt: "site-info", apis: Object.keys(info).length }));
+  return json({ available: true, info, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
 }
