@@ -132,6 +132,14 @@ const zoomWarn = () => { $("#zoom-warn").hidden = !(state.step === 2 && map.getZ
 map.on("zoomend", zoomWarn);
 map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); track("located", { via: "move" }); } });
 
+// 画面上の点が地図の上に重ねたボタンの範囲内か
+function overlayHit(x: number, y: number): boolean {
+  return $$("#map-tools button, .maplibregl-ctrl-group, .maplibregl-ctrl-attrib").some(el => {
+    const r = el.getBoundingClientRect(); return r.width > 0 && x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4;
+  });
+}
+// 地図の上のボタンの操作は地図に伝えない
+for (const ev of ["pointerdown", "mousedown", "touchstart", "click", "dblclick"]) $("#map-tools").addEventListener(ev, (e) => e.stopPropagation());
 // 頂点の近くを触ったときは追加しない（ドラッグのつもりで少しずれた場合）。指ではさらに広めに取る
 const COARSE = matchMedia("(pointer: coarse)").matches;
 const NEAR_PX = COARSE ? 36 : 16;
@@ -140,6 +148,11 @@ map.on("click", (e) => {
   if (map.getZoom() < MIN_DRAW_ZOOM) { zoomWarn(); return; }
   const near = state.points.some(p => { const q = map.project(p as [number, number]); return Math.hypot(q.x - e.point.x, q.y - e.point.y) < NEAR_PX; });
   if (near) return;
+  // 地図の上のボタン（地図/航空写真の切り替え・拡大縮小など）を押したときは追加しない
+  const t = (e.originalEvent as MouseEvent | undefined)?.target as HTMLElement | null;
+  if (t && t.closest("button, a, .maplibregl-ctrl, .map-tools, .style-pick, .orient")) return;
+  const ev = e.originalEvent as MouseEvent | undefined;
+  if (ev && overlayHit(ev.clientX, ev.clientY)) return;
   state.points.push([e.lngLat.lng, e.lngLat.lat]);
   state.edges = [];
   save(); redrawMap(); updateArea(); paintStepper();
