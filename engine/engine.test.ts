@@ -67,9 +67,42 @@ for (const use of ["house", "rental"] as const) {
     const max = r.plans[2].metrics;
     assert.ok(Math.abs(max.bcrUsed - 60) < 0.5, `bcr ${max.bcrUsed}`);
     assert.ok(max.farUsed <= r.site.farEffective + 0.1, `far ${max.farUsed}`);
-    assert.ok(max.floors <= r.site.floorsCap, `floors ${max.floors}`);
+    // 戸建ては3階まで。集合住宅は段状の道路斜線で一様な上限を超えてよい
+    if (use === "house") assert.ok(max.floors <= 3, `floors ${max.floors}`);
   });
 }
+
+test("集合住宅の上限案は容積率を使い切り、上の階は道路側から段状に下がる", () => {
+  const r = computePlans({ polygon: rect(13, 15), roadEdges: [{ index: 0, width: "6to12" }], zone: "r2mid", focusUse: "rental" });
+  const C = r.plans[2];
+  assert.ok(Math.abs(C.metrics.farUsed - r.site.farEffective) < 1, `far ${C.metrics.farUsed}/${r.site.farEffective}`);
+  assert.ok(C.metrics.floors >= 4, `floors ${C.metrics.floors}`);
+  const bs = [...C.buildings].sort((x, y) => (x.baseFloor ?? 0) - (y.baseFloor ?? 0));
+  for (let i = 1; i < bs.length; i++) {
+    assert.ok(bs[i].v0 >= bs[i - 1].v0 - 1e-6, "上の階ほど道路から離れる");
+    assert.ok(bs[i].u0 >= bs[i - 1].u0 - 1e-6 && bs[i].u1 <= bs[i - 1].u1 + 1e-6 && bs[i].v1 <= bs[i - 1].v1 + 1e-6, "上の階は下の階からはみ出さない");
+  }
+});
+
+test("段状の道路斜線：どの階も（高さ÷勾配−道路幅−後退距離）以上道路から離れる", () => {
+  const r = computePlans({ polygon: rect(16, 30), roadEdges: [{ index: 0, width: "4to6" }], zone: "nbrCom", focusUse: "rental" });
+  const C = r.plans[2];
+  const bs = C.buildings;
+  const s0 = Math.min(...bs.filter(b => !b.baseFloor).map(b => b.v0));
+  for (const b of bs) {
+    const H = ((b.baseFloor ?? 0) + b.floors) * b.floorHeight;
+    const need = Math.min(H / 1.5 - 4 - s0, 20);
+    assert.ok(b.v0 >= need - 0.05, `H ${H} v0 ${b.v0} need ${need}`);
+  }
+  assert.ok(C.metrics.farUsed <= r.site.farEffective + 0.1);
+});
+
+test("戸建ての上限案は3階まで。使い切れない理由を注記する", () => {
+  const r = computePlans({ polygon: rect(12, 16), roadEdges: [{ index: 0, width: "6to12" }], zone: "nbrCom", focusUse: "house" });
+  const C = r.plans[2];
+  assert.ok(C.metrics.floors <= 3);
+  assert.ok(C.notes.some(n => n.includes("戸建ては3階まで")), C.notes.join(" / "));
+});
 
 test("容積率が建ぺい率の整数倍でないとき、最大案は上階を一部だけ載せる", () => {
   // 一低 50/80 → 1階 100㎡、上に約60㎡

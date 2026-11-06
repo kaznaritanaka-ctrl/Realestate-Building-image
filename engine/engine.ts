@@ -203,13 +203,16 @@ export function computePlans(input: SiteInput): EngineResult {
   const slantH = slope * (Math.min(roadForSlope, 12) + 2 * frontGap);
   const zoneMax = zone.lowRise ? 3 : 5;
   const floorsCap = Math.max(1, Math.min(zoneMax, Math.floor(slantH / 3.0)));
-  if (floorsCap < zoneMax) warnings.push(`道路斜線を簡易計算し、正面の高さを約${slantH.toFixed(1)}m（${floorsCap}階）までとしています。上の階を後退させる設計なら、もう1階増やせる場合があります。`);
+  if (roadEdges.length) warnings.push("道路斜線は簡易計算です（後退緩和を含む）。上限の案は、上の階を道路から段状に下げて計算しています。");
   warnings.push("北側斜線・日影規制・高度地区・地区計画は考慮していません。");
 
-  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P: Q, hasRoad: roadEdges.length > 0 };
+  // 道路斜線の適用距離（前面道路の反対側の境界から、この距離までが斜線の対象）
+  const applyDist = zone.residential ? (far <= 200 ? 20 : far <= 300 ? 25 : far <= 400 ? 30 : 35) : (far <= 400 ? 20 : far <= 600 ? 25 : far <= 800 ? 30 : 35);
+  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P: Q, hasRoad: roadEdges.length > 0,
+    phi: G.phi, slope, roadW: Math.min(roadForSlope, 12), applyDist };
 
   const ids = ["A", "B", "C"] as const;
-  const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "建ぺい率いっぱい" };
+  const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "上限" };
   let plans: Plan[];
   if (input.focusUse === "other" && zone.storeLimit === 0) {
     // 店舗がほぼ建てられない地域：規模違いではなく、活用方法違いの3案にする
@@ -264,6 +267,8 @@ interface Ctx {
   maxFootprint: number; maxGFA: number; floorsCap: number; zone: ZoneInfo;
   buildableRect: Rect | null; inside: Uint8Array[]; cols: number; rows: number; umin: number; vmin: number; P: Vec2[];
   hasRoad: boolean;
+  /** 道路斜線の段状計算用：建物の向き、勾配、前面道路の幅、適用距離 */
+  phi: number; slope: number; roadW: number; applyDist: number;
 }
 
 /** 置ける範囲 rect の中に、面積 target の長方形を置く。anchor=back は奥寄せ（手前を駐車に使う） */
@@ -354,6 +359,72 @@ function maxMass(ctx: Ctx, rect: Rect, floorCap: number, kind: Box["kind"], fh: 
   return out;
 }
 
+const rot = (p: Vec2, ang: number): Vec2 => [p[0] * Math.cos(ang) - p[1] * Math.sin(ang), p[0] * Math.sin(ang) + p[1] * Math.cos(ang)];
+/** 長方形の、道路境界線からのいちばん近い距離 */
+function frontDist(ctx: Ctx, r: Rect): number {
+  return Math.min(...([[r.u0, r.v0], [r.u1, r.v0], [r.u0, r.v1], [r.u1, r.v1]] as Vec2[]).map(c => rot(c, ctx.phi)[1]));
+}
+/** 道路側の辺を奥へ下げて、道路境界線からの距離を d 以上にする */
+function cutFront(ctx: Ctx, r: Rect, d: number): Rect {
+  let out = { ...r };
+  for (let i = 0; i < 4 && frontDist(ctx, out) < d - 1e-3; i++) {
+    out = { ...out, v0: Math.min(out.v1, out.v0 + (d - frontDist(ctx, out)) / Math.max(0.3, Math.cos(ctx.phi))) };
+  }
+  return out;
+}
+
+export type LimitReason = "far" | "cap" | "slant" | "area";
+/**
+ * 上限の建物：1階は建ぺい率いっぱい。上の階は、階ごとに道路斜線（後退緩和つきの簡易計算）を満たすよう
+ * 道路側を下げ（段状）、容積率に届くまで、または階数の上限まで積む。最後の階は残りの面積だけ（奥寄せ）
+ */
+function steppedMass(ctx: Ctx, rect: Rect, cap: number, kind: Box["kind"], fh: number, roof: Box["roof"]): { boxes: Box[]; reason: LimitReason } {
+  const base = placeRect(rect, Math.min(rectArea(rect), ctx.maxFootprint), "back");
+  const s0 = frontDist(ctx, base); // 後退距離（建物のいちばん道路寄りの部分）
+  const floors: Rect[] = [];
+  let gfa = 0, reason: LimitReason = "cap";
+  for (let k = 1; k <= cap; k++) {
+    if (gfa >= ctx.maxGFA - 1) { reason = "far"; break; }
+    let r = { ...base };
+    if (ctx.hasRoad) {
+      // 高さ H の部分は、道路境界線から H/勾配 − 道路幅 − 後退距離 以上離す（適用距離より先は制限なし）
+      const need = Math.min((k * fh) / ctx.slope - ctx.roadW - s0, ctx.applyDist);
+      if (need > frontDist(ctx, r)) r = cutFront(ctx, r, need);
+    }
+    const rem = ctx.maxGFA - gfa;
+    if (rectArea(r) > rem) r = placeRect(r, rem, "back");
+    if (rectArea(r) < 15 || r.u1 - r.u0 < 3 || r.v1 - r.v0 < 3) {
+      reason = ctx.maxGFA - gfa < 15 ? "far" : k === 1 ? "area" : "slant";
+      break;
+    }
+    floors.push(r); gfa += rectArea(r);
+    if (k === cap) reason = gfa >= ctx.maxGFA - 1 ? "far" : "cap";
+  }
+  // 同じ形の階をまとめて箱にする
+  const boxes: Box[] = [];
+  floors.forEach((r, i) => {
+    const last = boxes[boxes.length - 1];
+    if (last && Math.abs(last.u0 - r.u0) < 1e-6 && Math.abs(last.u1 - r.u1) < 1e-6 && Math.abs(last.v0 - r.v0) < 1e-6 && Math.abs(last.v1 - r.v1) < 1e-6) last.floors++;
+    else boxes.push({ ...r, floors: 1, floorHeight: fh, roof: "flat", kind, ...(i ? { baseFloor: i } : {}) });
+  });
+  if (boxes.length) boxes[boxes.length - 1].roof = roof;
+  return { boxes, reason };
+}
+
+function limitNote(ctx: Ctx, boxes: Box[], reason: LimitReason, kind: "house" | "apartment"): string | null {
+  const gfa = gfaOf(boxes), fp = boxes.filter(b => !b.baseFloor).reduce((s, b) => s + rectArea(b), 0);
+  const farUsed = Math.round((gfa / ctx.siteArea) * 100), farMax = Math.round(ctx.farEffective);
+  const parts: string[] = [];
+  if (fp < ctx.maxFootprint - 1) parts.push(`建ぺい率は${ctx.bcr}％のうち約${Math.round((fp / ctx.siteArea) * 100)}％（敷地の形と後退距離のため、長方形の建物として計算）`);
+  if (farUsed < farMax - 1) {
+    const why = reason === "cap" ? (kind === "house" ? "戸建ては3階までとしているため" : "低層住居の地域（高さ10m前後）で3階までのため")
+      : reason === "slant" ? "道路斜線（簡易計算）で、上の階を道路から下げても床を確保できないため"
+      : reason === "area" ? "建てられる範囲が狭いため" : "";
+    parts.push(`容積率は${farMax}％のうち約${farUsed}％${why ? `（${why}）` : ""}`);
+  }
+  return parts.length ? `上限まで使い切れていない点：${parts.join("。")}。` : null;
+}
+
 /** small と max の間をとる：延床を中間にして、建築面積も中間にする */
 function midMass(ctx: Ctx, rect: Rect, small: Box[], max: Box[], kind: Box["kind"], fh: number, roof: Box["roof"]): Box[] {
   const g = (bs: Box[]) => bs.reduce((s, b) => s + rectArea(b) * b.floors, 0);
@@ -361,7 +432,8 @@ function midMass(ctx: Ctx, rect: Rect, small: Box[], max: Box[], kind: Box["kind
   const gfa = (g(small) + g(max)) / 2;
   const fp = Math.min((f(small) + f(max)) / 2, ctx.maxFootprint, rectArea(rect));
   if (fp <= 0) return [];
-  const floors = Math.max(1, Math.min(ctx.floorsCap, Math.round(gfa / fp)));
+  const maxFloors = max.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
+  const floors = Math.max(1, Math.min(Math.max(ctx.floorsCap, Math.ceil(maxFloors / 2)), Math.round(gfa / fp)));
   const r = placeRect(rect, Math.min(fp, gfa / floors), "back");
   return [{ ...r, floors, floorHeight: fh, roof, kind }];
 }
@@ -380,8 +452,10 @@ function planHouse(ctx: Ctx, size: Size): Plan {
     if (fp * 2 < smallGFA * 0.9 && cap >= 3) { floors = 3; fp = Math.min(smallGFA / 3, ctx.maxFootprint, rectArea(rect)); }
     floors = Math.min(floors, cap);
     const small: Box[] = [{ ...placeRect(rect, fp, "back"), floors, floorHeight: 2.9, roof: "gable", kind: "house" }];
-    const max = maxMass(ctx, rect, cap, "house", 2.9, "gable");
+    const st = steppedMass(ctx, rect, 3, "house", 2.9, "gable"); // 戸建ては3階まで
+    const max = st.boxes.length ? st.boxes : maxMass(ctx, rect, cap, "house", 2.9, "gable");
     buildings.push(...(size === "small" ? small : size === "max" ? max : midMass(ctx, rect, small, max, "house", 2.9, "gable")));
+    if (size === "max") { const n = limitNote(ctx, max, st.reason, "house"); if (n) notes.push(n); }
     if (buildings.some(b => (b.baseFloor ?? 0) + b.floors >= 3)) notes.push("3階建ての住宅です。");
   } else notes.push("住宅を置ける広さが確保できません。");
   const stalls = placeStalls(ctx, buildings, size === "max" ? 1 : 2);
@@ -400,7 +474,10 @@ function planRental(ctx: Ctx, size: Size): Plan {
   const rect = ctx.buildableRect;
   const buildings: Box[] = [];
   if (rect && rectArea(rect) >= 30) {
-    const max = maxMass(ctx, rect, ctx.floorsCap, "apartment", 3.0, "flat");
+    // 集合住宅は階数を固定しない（低層住居の地域だけ3階まで）。上限は容積率と段状の道路斜線で決まる
+    const st = steppedMass(ctx, rect, ctx.zone.lowRise ? 3 : 30, "apartment", 3.0, "flat");
+    const max = st.boxes.length ? st.boxes : maxMass(ctx, rect, ctx.floorsCap, "apartment", 3.0, "flat");
+    if (size === "max") { const n = limitNote(ctx, max, st.reason, "apartment"); if (n) notes.push(n); }
     const fpMax = Math.min(rectArea(rect), ctx.maxFootprint);
     const sFloors = Math.max(1, Math.min(2, ctx.floorsCap));
     const sFp = Math.min(fpMax * 0.55, ctx.maxGFA / sFloors);
