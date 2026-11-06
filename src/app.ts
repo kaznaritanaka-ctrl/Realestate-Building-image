@@ -236,6 +236,7 @@ function go(step: number) {
   $("#crosshair").hidden = step !== 2;
   $("#orient").hidden = !show3d;
   $("#style-pick").hidden = !show3d;
+  $("#views").hidden = !show3d;
   if (step === 2) { updateArea(); zoomWarn(); }
   if (step === 3) renderEdgeList();
   if (step === 4) renderZone();
@@ -368,6 +369,27 @@ $("#pdf-btn").addEventListener("click", async () => {
 $("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
 $("#pv-close").addEventListener("click", () => { $("#print-view").hidden = true; ($("#pdf-btn") as HTMLButtonElement).focus(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#print-view").hidden) $("#print-view").hidden = true; });
+
+// 視点のプリセット：9方向（道路から＋8方向）×鳥瞰／目線。手で回す操作もそのまま使える
+let viewH: "bird" | "eye" = "bird";
+let viewDir = -1;
+function paintViews() {
+  $$<HTMLButtonElement>("#views-panel [data-h]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.h === viewH)));
+  $$<HTMLButtonElement>("#views-panel [data-dir]").forEach(b => b.classList.toggle("on", Number(b.dataset.dir) === viewDir));
+}
+$("#views-toggle").addEventListener("click", () => {
+  const p = $("#views-panel"); p.hidden = !p.hidden;
+  $("#views-toggle").setAttribute("aria-expanded", String(!p.hidden));
+});
+$$<HTMLButtonElement>("#views-panel [data-h]").forEach(b => b.addEventListener("click", () => {
+  viewH = b.dataset.h as "bird" | "eye"; paintViews();
+  viewer?.setView(viewDir < 0 ? 1 : viewDir, viewH); if (viewDir < 0) { viewDir = 1; paintViews(); }
+  track("view", { h: viewH, dir: viewDir });
+}));
+$$<HTMLButtonElement>("#views-panel [data-dir]").forEach(b => b.addEventListener("click", () => {
+  viewDir = Number(b.dataset.dir); paintViews(); viewer?.setView(viewDir, viewH);
+  track("view", { h: viewH, dir: viewDir });
+}));
 
 // 外観のスタイル（和風・ホワイト・ブラック）
 function paintStyle() {

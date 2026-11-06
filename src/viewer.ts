@@ -39,7 +39,7 @@ export class Viewer {
     this.scene.background = new THREE.Color(0xf3f5f6);
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 2000);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
+    this.controls.enableDamping = false; // 手を止めたらすぐ止まる（慣性なし）
     this.controls.maxPolarAngle = Math.PI * 0.48;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc2ccd0, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -52,13 +52,20 @@ export class Viewer {
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(el);
     this.resize();
-    this.controls.addEventListener("start", () => this.requestRender(60000));
+    this.controls.addEventListener("start", () => { this.anim = null; this.requestRender(60000); });
     // 指を離したあとも、慣性の間とPLATEAUの読み込みのために少しだけ描き続ける
     this.controls.addEventListener("end", () => { this.busyUntil = performance.now() + (this.context ? 2000 : 300); });
-    this.controls.dampingFactor = 0.12; // 慣性を短めに（止まったら描くのをやめるため）
     const lastPos = new THREE.Vector3(), lastTarget = new THREE.Vector3();
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
+      if (this.anim) {
+        const t = Math.min(1, (performance.now() - this.anim.t0) / this.anim.ms);
+        const k = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // ゆっくり動き出して、ゆっくり止まる
+        this.camera.position.lerpVectors(this.anim.fromPos, this.anim.toPos, k);
+        this.controls.target.lerpVectors(this.anim.fromTarget, this.anim.toTarget, k);
+        if (t >= 1) this.anim = null;
+        this.dirty = true;
+      }
       this.controls.update();
       // 慣性の動きが目に見えないほど小さくなったら「止まった」とみなす
       const dist = this.camera.position.distanceTo(this.controls.target) || 1;
@@ -219,6 +226,45 @@ export class Viewer {
     this.camera.position.set(cu + d * 0.75, d * 0.75, -cv + d * 1.0);
     this.controls.target.set(cu, 2, -cv);
     this.controls.update();
+    // 視点ボタン用：敷地の中心と、道路のある向き（敷地の中心→道路の中心）
+    this.viewBase.center.set(cu, 0, -cv); this.viewBase.span = span;
+    const roads = res.site.roadsUV.flat();
+    if (roads.length) {
+      const ru = roads.reduce((a, p) => a + p[0], 0) / roads.length, rv = roads.reduce((a, p) => a + p[1], 0) / roads.length;
+      this.viewBase.road.set(ru, 0, -rv);
+      this.viewBase.front.set(ru - cu, 0, -rv + cv).normalize();
+    } else { this.viewBase.road.set(cu, 0, -cv + span * 0.6); this.viewBase.front.set(0, 0, 1); }
+  }
+
+  private anim: { t0: number; ms: number; fromPos: THREE.Vector3; toPos: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
+  private viewBase = { center: new THREE.Vector3(), road: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1), span: 10 };
+  /**
+   * 決まった視点へ動かす。dir：0＝道路から、1〜8＝前・右前・右・右奥・奥・左奥・左・左前（道路側から見て）
+   * height：bird＝鳥瞰、eye＝人の目線（地面から1.6m）
+   */
+  setView(dir: number, height: "bird" | "eye") {
+    const { center: c, road, front: f, span } = this.viewBase;
+    const box = new THREE.Box3().setFromObject(this.planGroup);
+    const ht = box.isEmpty() ? 3 : Math.max(box.max.y, 3);
+    const bc = box.isEmpty() ? c.clone() : box.getCenter(new THREE.Vector3()).setY(0);
+    const right = new THREE.Vector3(f.z, 0, -f.x); // 道路側から建物を見たときの右
+    const d = span * 1.15 + ht * 1.6 + 8;
+    let pos: THREE.Vector3, target: THREE.Vector3;
+    if (dir === 0) {
+      // 道路の上（敷地の正面）に立って見る
+      // 建物から道路の先へ、全体が入る距離まで下がる
+      const back = Math.max(bc.distanceTo(road) + 4, d * 0.8);
+      const base = bc.clone().addScaledVector(f, back);
+      pos = height === "eye" ? base.setY(1.6) : base.addScaledVector(f, d * 0.1).setY(d * 0.75);
+      target = bc.clone().setY(height === "eye" ? ht * 0.45 : 1.5);
+    } else {
+      const phi = ((dir - 1) * Math.PI) / 4;
+      const v = f.clone().multiplyScalar(Math.cos(phi)).addScaledVector(right, Math.sin(phi)).normalize();
+      pos = height === "eye" ? bc.clone().addScaledVector(v, d * 0.85).setY(1.6) : bc.clone().addScaledVector(v, d * 0.7).setY(d * 0.8);
+      target = bc.clone().setY(height === "eye" ? ht * 0.45 : 1.5);
+    }
+    this.anim = { t0: performance.now(), ms: 450, fromPos: this.camera.position.clone(), toPos: pos, fromTarget: this.controls.target.clone(), toTarget: target };
+    this.requestRender(600);
   }
 
   private style: ExteriorStyle = "white";
