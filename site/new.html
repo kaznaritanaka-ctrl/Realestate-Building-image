@@ -14,10 +14,12 @@
 <header class="site">
   <div class="wrap">
     <a class="brand" href="/">土地の未来図<small>AI建築イメージ生成</small></a>
-    <div class="progress" id="progress" aria-live="polite">
-      <button type="button" class="back" id="back-btn" aria-label="前の画面に戻る"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
-      <span class="prog-label"><b id="prog-title">状況</b><span id="prog-count">1 / 6</span></span>
-      <span class="prog-bar" aria-hidden="true"><i id="prog-bar"></i></span>
+    <div class="progress" id="progress">
+      <div class="prog-top">
+        <button type="button" class="back" id="back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg><span id="back-label">戻る</span></button>
+        <span class="prog-label" aria-live="polite"><span id="prog-count">1 / 6</span><b id="prog-title">状況</b></span>
+      </div>
+      <ol class="steps-nav" id="steps-nav" aria-label="入力の手順（押すとその画面へ）"></ol>
     </div>
     <nav class="site desk"><a href="/terms.html#disclaimer">注意事項</a><a href="/about.html">運営者情報</a></nav>
   </div>

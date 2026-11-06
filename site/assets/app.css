@@ -255,3 +255,27 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
   body[data-mode="result"] .app { grid-template-rows: 46% 1fr; }
   .wstep .qtitle { font-size: 1.35rem; }
 }
+
+/* ヘッダー：戻る（文字つき）＋手順1〜6と結果。押すとその画面へ。未入力は黄色 */
+.progress { flex-direction: column; align-items: stretch; gap: 4px; max-width: 560px; }
+.prog-top { display: flex; align-items: center; gap: 8px; }
+.progress .back { width: auto; height: 36px; padding: 0 12px 0 6px; border-radius: 18px; border: 1px solid var(--line); background: #fff; gap: 2px; font: inherit; font-size: .85rem; font-weight: 600; flex: none; }
+.progress .back:hover { border-color: var(--accent); background: #fff; }
+.prog-label { gap: 8px; align-items: baseline; }
+.prog-label span { font-size: .8rem; color: var(--ink-soft); }
+.prog-bar { display: none; }
+.steps-nav { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.steps-nav button { width: 100%; font: inherit; background: none; border: 0; border-radius: 10px; padding: 3px 0; display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: pointer; color: var(--ink-soft); min-height: 40px; }
+.steps-nav button:hover { background: #f1eee6; }
+.steps-nav i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .75rem; background: #e7e3d9; }
+.steps-nav span { font-size: .68rem; line-height: 1.2; white-space: nowrap; }
+.steps-nav .done i { background: var(--accent-soft); color: var(--accent); }
+.steps-nav .todo i { background: #f6d77a; color: #6b4e00; }
+.steps-nav .todo span { color: #8a6400; }
+.steps-nav .active { background: var(--accent-soft); }
+.steps-nav .active i { background: var(--accent); color: #fff; }
+.steps-nav .active span { color: var(--accent); font-weight: 700; }
+.app-body header.site .wrap { height: auto; min-height: 64px; padding-top: 6px; padding-bottom: 6px; }
+@media (max-width: 760px) {
+  .app-body header.site .wrap { height: auto; padding: 6px 8px; }
+}

@@ -209,16 +209,36 @@ function isDone(n: number): boolean {
     default: return false;
   }
 }
+const STEP_SHORT = ["状況", "場所", "敷地", "道路", "ルール", "使い道", "結果"];
 function paintStepper() {
   const st = state.step;
   $("#prog-title").textContent = STEP_TITLES[st];
   $("#prog-count").textContent = st < 6 ? `${st + 1} / 6` : "";
-  ($("#prog-bar") as HTMLElement).style.width = `${Math.round((Math.min(st, 6) / 6) * 100)}%`;
+  $("#back-label").textContent = st === 0 ? "トップへ" : `戻る`;
+  const nav = $("#steps-nav");
+  if (!nav.children.length) {
+    STEP_SHORT.forEach((label, n) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<button type="button" data-goto="${n}"><i>${n < 6 ? n + 1 : "✓"}</i><span>${label}</span></button>`;
+      nav.appendChild(li);
+    });
+  }
+  $$<HTMLButtonElement>("#steps-nav button").forEach(b => {
+    const n = Number(b.dataset.goto);
+    const active = n === st, done = isDone(n);
+    b.classList.toggle("active", active);
+    b.classList.toggle("done", !active && done);
+    b.classList.toggle("todo", !active && !done);
+    b.setAttribute("aria-label", `${n < 6 ? `手順${n + 1}` : ""}${STEP_TITLES[n]}（${active ? "表示中" : done ? "入力済み" : "未入力"}）`);
+    if (active) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+  });
 }
 
 document.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement).closest("[data-next]") as HTMLElement | null;
   if (t) { e.preventDefault(); if (t.id === "run-btn") { state.purposeSet = true; } go(Number(t.dataset.next)); return; }
+  const g = (e.target as HTMLElement).closest("[data-goto]") as HTMLElement | null;
+  if (g) { e.preventDefault(); const n = Number(g.dataset.goto); if (n !== state.step) { track("step_jump", { step: n }); go(n); } return; }
   const c = (e.target as HTMLElement).closest("[data-situation]") as HTMLElement | null;
   if (c) {
     setSituation(state, c.dataset.situation as Situation); save(); syncRadios(); paintSituation();
