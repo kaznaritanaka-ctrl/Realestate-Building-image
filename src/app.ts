@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import { computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
-import { Viewer, type ExteriorStyle } from "./viewer.ts";
+import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
@@ -372,12 +372,20 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#pri
 
 // 視点の操作盤：東西南北と道路側からの内向き矢印 × 鳥瞰／目線（合計10通り）。手で回す操作もそのまま使える
 let viewH: "bird" | "eye" = "bird";
-let viewSide: "n" | "e" | "s" | "w" | "road" | "" = "";
+let viewSide: ViewSide | "" = "";
 function paintViews() {
   $$<HTMLButtonElement>("#views [data-h]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.h === viewH)));
   $$<HTMLButtonElement>("#views [data-side]").forEach(b => b.classList.toggle("on", b.dataset.side === viewSide));
 }
 function placeRoadButton() {
+  // 8方向のボタンを輪の上に等間隔で並べ、矢印を中心に向ける
+  const ring = $(".gz-ring"); const half = ring.offsetWidth / 2;
+  $$<HTMLButtonElement>(".gz-dir").forEach(btn => {
+    const deg = Number(btn.dataset.deg), rad = (deg * Math.PI) / 180, r = half - btn.offsetWidth / 2 - 3;
+    btn.style.left = `${(half + Math.sin(rad) * r).toFixed(1)}px`;
+    btn.style.top = `${(half - Math.cos(rad) * r).toFixed(1)}px`;
+    btn.style.setProperty("--rot", `${deg}deg`);
+  });
   const rb = viewer?.roadBearing();
   const b = $("#gz-road");
   if (rb == null || !result?.site.roadsUV.length) { b.hidden = true; return; }
@@ -390,12 +398,12 @@ function placeRoadButton() {
 }
 addEventListener("resize", () => { if (state.step === 6) placeRoadButton(); });
 $$<HTMLButtonElement>("#views [data-side]").forEach(b => b.addEventListener("click", () => {
-  viewSide = b.dataset.side as typeof viewSide; paintViews(); viewer?.setView(viewSide as Exclude<typeof viewSide, "">, viewH);
+  viewSide = b.dataset.side as typeof viewSide; paintViews(); viewer?.setView(viewSide as ViewSide, viewH);
   track("view", { h: viewH, dir: viewSide });
 }));
 $$<HTMLButtonElement>("#views [data-h]").forEach(b => b.addEventListener("click", () => {
   viewH = b.dataset.h as "bird" | "eye"; if (!viewSide) viewSide = "road"; paintViews();
-  viewer?.setView(viewSide as Exclude<typeof viewSide, "">, viewH);
+  viewer?.setView(viewSide as ViewSide, viewH);
   track("view", { h: viewH, dir: viewSide });
 }));
 

@@ -432,3 +432,19 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
   .gz-h button svg { width: 16px; height: 16px; }
   .stage .orient { top: 58px; }
 }
+/* 8方向：位置はJSで輪の上に配置。矢印は中心を向く */
+.gz-ring { width: 172px; height: 172px; }
+.gz-ring::before { inset: 46px; }
+.gz-dir { width: 40px; height: 40px; margin: -20px 0 0 -20px; font-size: .7rem; }
+.gz-dir.n, .gz-dir.s, .gz-dir.e, .gz-dir.w { left: auto; top: auto; }
+.gz-dir i, .gz-dir.s i, .gz-dir.e i, .gz-dir.w i { order: 0; margin: 0; transform: rotate(var(--rot, 0deg)); }
+.gz-dir.ne, .gz-dir.se, .gz-dir.sw, .gz-dir.nw { font-size: .6rem; background: rgba(255,255,255,.06); }
+.gz-dir.on { background: #2fb487; }
+@media (max-width: 760px) {
+  .gz-ring { width: 136px; height: 136px; }
+  .gz-ring::before { inset: 36px; }
+  .gz-dir { width: 32px; height: 32px; margin: -16px 0 0 -16px; font-size: .62rem; }
+  .gz-dir.ne, .gz-dir.se, .gz-dir.sw, .gz-dir.nw { font-size: .52rem; }
+  .gz-dir i { border-left-width: 5px; border-right-width: 5px; border-top-width: 6px; }
+  .stage .gizmo { bottom: 38px; left: 14px; }
+}

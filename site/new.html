@@ -177,10 +177,14 @@
     <div class="gizmo" id="views" hidden>
       <div class="gz-ring" role="group" aria-label="見る方向（その方角から建物を見る）">
         <span class="gz-needle" id="gz-needle" aria-hidden="true"></span>
-        <button type="button" class="gz-dir n" data-side="n" aria-label="北から見る"><i aria-hidden="true"></i>北</button>
-        <button type="button" class="gz-dir e" data-side="e" aria-label="東から見る"><i aria-hidden="true"></i>東</button>
-        <button type="button" class="gz-dir s" data-side="s" aria-label="南から見る"><i aria-hidden="true"></i>南</button>
-        <button type="button" class="gz-dir w" data-side="w" aria-label="西から見る"><i aria-hidden="true"></i>西</button>
+        <button type="button" class="gz-dir n" data-side="n" data-deg="0" aria-label="北から見る"><i aria-hidden="true"></i>北</button>
+        <button type="button" class="gz-dir ne" data-side="ne" data-deg="45" aria-label="北東から見る"><i aria-hidden="true"></i>北東</button>
+        <button type="button" class="gz-dir e" data-side="e" data-deg="90" aria-label="東から見る"><i aria-hidden="true"></i>東</button>
+        <button type="button" class="gz-dir se" data-side="se" data-deg="135" aria-label="南東から見る"><i aria-hidden="true"></i>南東</button>
+        <button type="button" class="gz-dir s" data-side="s" data-deg="180" aria-label="南から見る"><i aria-hidden="true"></i>南</button>
+        <button type="button" class="gz-dir sw" data-side="sw" data-deg="225" aria-label="南西から見る"><i aria-hidden="true"></i>南西</button>
+        <button type="button" class="gz-dir w" data-side="w" data-deg="270" aria-label="西から見る"><i aria-hidden="true"></i>西</button>
+        <button type="button" class="gz-dir nw" data-side="nw" data-deg="315" aria-label="北西から見る"><i aria-hidden="true"></i>北西</button>
         <button type="button" class="gz-road" id="gz-road" data-side="road" aria-label="道路側から見る"><i aria-hidden="true"></i>道路</button>
       </div>
       <div class="gz-h" role="radiogroup" aria-label="見る高さ">

@@ -258,13 +258,15 @@ export class Viewer {
    * 決まった視点へ動かす。side：その方角に立って建物を見る（n/e/s/w）、road＝道路側から
    * height：bird＝鳥瞰、eye＝人の目線（地面から1.6m）
    */
-  setView(side: "n" | "e" | "s" | "w" | "road", height: "bird" | "eye") {
+  setView(side: ViewSide, height: "bird" | "eye") {
     const { road, front: f, north, east, span } = this.viewBase;
     const box = new THREE.Box3().setFromObject(this.planGroup);
     const ht = box.isEmpty() ? 3 : Math.max(box.max.y, 3);
     const bc = box.isEmpty() ? this.viewBase.center.clone() : box.getCenter(new THREE.Vector3()).setY(0);
     const d = span * 1.15 + ht * 1.6 + 8;
-    const v = side === "road" ? f.clone() : side === "n" ? north.clone() : side === "s" ? north.clone().negate() : side === "e" ? east.clone() : east.clone().negate();
+    const deg = SIDE_DEG[side as Exclude<ViewSide, "road">];
+    const v = side === "road" ? f.clone()
+      : north.clone().multiplyScalar(Math.cos((deg * Math.PI) / 180)).addScaledVector(east, Math.sin((deg * Math.PI) / 180)).normalize();
     // 道路側から見るときは、道路の先まで下がって全体を入れる
     const back = side === "road" ? Math.max(bc.distanceTo(road) + 4, d * 0.8) : d * 0.85;
     const pos = height === "eye" ? bc.clone().addScaledVector(v, back).setY(1.6) : bc.clone().addScaledVector(v, back * 0.82).setY(d * 0.8);
@@ -314,6 +316,9 @@ function shapeGeom(P: [number, number][]) {
 }
 
 export type ExteriorStyle = "wa" | "white" | "black";
+export type ViewSide = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw" | "road";
+/** 北から時計回りの角度 */
+const SIDE_DEG = { n: 0, ne: 45, e: 90, se: 135, s: 180, sw: 225, w: 270, nw: 315 } as const;
 interface Palette { wall: number; apartment: number; store: number; edge: number; roof: number; parapet: number; win: number; frame: number; accent: number; band: boolean; hip: boolean }
 // 外観の色と形。和風＝寄棟のいぶし瓦・塗り壁・腰板と庇、ホワイト＝白い壁とグレーの切妻、ブラック＝黒い外壁と木の差し色
 const PALETTES: Record<ExteriorStyle, Palette> = {
