@@ -14,53 +14,72 @@
 <header class="site">
   <div class="wrap">
     <a class="brand" href="/">土地の未来図<small>AI建築イメージ生成</small></a>
-    <ol class="stepper" id="stepper" aria-label="入力の進み具合"><li><button type="button" data-step="1"><i>1</i><span>場所</span></button></li><li><button type="button" data-step="2"><i>2</i><span>敷地</span></button></li><li><button type="button" data-step="3"><i>3</i><span>道路</span></button></li><li><button type="button" data-step="4"><i>4</i><span>法規制</span></button></li><li><button type="button" data-step="5"><i>5</i><span>目的</span></button></li><li><button type="button" data-step="6"><i>6</i><span>結果</span></button></li></ol>
-    <nav class="site"><a href="/terms.html#disclaimer">注意事項</a><a href="/about.html">運営者情報</a></nav>
+    <div class="progress" id="progress" aria-live="polite">
+      <button type="button" class="back" id="back-btn" aria-label="前の画面に戻る"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg></button>
+      <span class="prog-label"><b id="prog-title">状況</b><span id="prog-count">1 / 6</span></span>
+      <span class="prog-bar" aria-hidden="true"><i id="prog-bar"></i></span>
+    </div>
+    <nav class="site desk"><a href="/terms.html#disclaimer">注意事項</a><a href="/about.html">運営者情報</a></nav>
   </div>
 </header>
 
 <div class="app">
   <aside class="panel" id="panel">
 
-    <section class="wstep" data-step="1">
-      <h2>土地の場所を探す <button type="button" class="help" aria-label="説明" data-tip="住所を入力して検索し、地図を土地の位置まで移動してください。地図をドラッグ・拡大して合わせることもできます。">?</button></h2>
+    <section class="wstep q" data-step="0" hidden>
+      <h2 class="qtitle">どんな土地のことで調べますか</h2>
+      <p class="hint">いくつかの質問に答えると、その土地に建てられる大きさを3案の3Dで表示します。約3分・登録なし。</p>
+      <div class="cards" id="situation">
+        <button type="button" class="choice-card" data-situation="house"><b>家を建てたい</b><span>土地を持っている・探している</span></button>
+        <button type="button" class="choice-card" data-situation="land"><b>土地を活用したい</b><span>アパート・店舗・駐車場など</span></button>
+        <button type="button" class="choice-card" data-situation="akiya"><b>空き家・古い家がある</b><span>建て替え・活用を比べる</span></button>
+        <button type="button" class="choice-card" data-situation="sell"><b>使い道・売り方が分からない土地</b><span>田畑・地方の土地など</span></button>
+        <button type="button" class="choice-card" data-situation="inherit"><b>相続した・これから相続する</b><span>土地でできることを先に知る</span></button>
+      </div>
+      <p class="sample-link"><button class="linklike" id="sample-btn" type="button">サンプルの土地で試す</button></p>
+    </section>
+
+    <section class="wstep" data-step="1" hidden>
+      <h2>土地の場所を探す</h2>
+      <p class="hint">住所で検索するか、地図を動かして土地を真ん中に合わせてください。</p>
       <form id="search-form" class="row">
-        <input id="search-q" type="search" placeholder="例：大阪府吹田市○○町1丁目" autocomplete="street-address" required>
+        <input id="search-q" type="search" placeholder="住所・地名（例：吹田市江坂町1丁目）" autocomplete="street-address" required>
         <button type="submit" class="btn">検索</button>
       </form>
       <ul id="search-results" class="results"></ul>
       <div class="actions">
-        <button class="btn primary" data-next="2">この位置で敷地を描く</button>
+        <button class="btn primary wide" data-next="2">この場所で敷地を描く</button>
       </div>
-      <p class="sample-link"><button class="linklike" id="sample-btn" type="button">地図を使わずにサンプルの土地で試す</button></p>
     </section>
 
     <section class="wstep" data-step="2" hidden>
       <h2>敷地の形を描く</h2>
-      <p class="hint">航空写真の上で、敷地の<strong>角を順番にタップ</strong>してください。3点以上で形になります。点は<strong>ドラッグで動かせます</strong>。境界線は目安で構いません。</p>
+      <p class="hint">地図を動かして中央の＋を土地の角に合わせ、「角を追加」を押します（地図を直接タップしても置けます）。置いた点は指でドラッグして直せます。</p>
       <p class="zoom-warn" id="zoom-warn" hidden>地図をもっと拡大してください（建物が判別できるくらいまで）。</p>
       <div class="stat"><span>面積</span><b id="area-val">—</b></div>
-      <div class="row">
+      <div class="draw-tools">
         <button class="btn" id="undo-btn" type="button">1つ戻す</button>
+        <button class="btn add" id="add-btn" type="button"><span aria-hidden="true">＋</span>角を追加</button>
         <button class="btn" id="clear-btn" type="button">やり直す</button>
       </div>
       <div class="actions">
-        <button class="btn" data-next="1">戻る</button>
-        <button class="btn primary" id="shape-done" data-next="3" disabled>形を確定</button>
+        <button class="btn primary wide" id="shape-done" data-next="3" disabled>この形で決定</button>
       </div>
     </section>
 
     <section class="wstep" data-step="3" hidden>
-      <h2>道路に接している辺 <button type="button" class="help" aria-label="説明" data-tip="敷地の各辺について、道路に接しているかと道路の幅を選んでください。番号は地図上の番号と対応しています。道路の幅で建てられる大きさが変わります。">?</button></h2>
-      <ul id="edge-list" class="edges"></ul>
+      <h2>道路に面している辺</h2>
+      <p class="hint">地図の番号をタップして辺を選び、前の道路の幅を選んでください。道路の幅で建てられる大きさが変わります。</p>
+      <div class="edge-chips" id="edge-chips"></div>
+      <div id="edge-q" class="edge-q"></div>
+      <p class="muted" id="edge-need" hidden>少なくとも1つの辺を道路にしてください（道路に面していない土地には、原則として建物を建てられません）。</p>
       <div class="actions">
-        <button class="btn" data-next="2">戻る</button>
-        <button class="btn primary" data-next="4">次へ</button>
+        <button class="btn primary wide" data-next="4">次へ</button>
       </div>
     </section>
 
-    <section class="wstep" data-step="4" hidden>
-      <h2>この土地のルール（用途地域） <button type="button" class="help" aria-label="説明" data-tip="建てられる建物の大きさは、土地ごとに決まっている「用途地域」「建ぺい率」「容積率」で変わります。建ぺい率＝敷地に対する建築面積の割合、容積率＝敷地に対する延床面積の割合です。">?</button></h2>
+    <section class="wstep q" data-step="4" hidden>
+      <h2 class="qtitle">この土地のルール <button type="button" class="help" aria-label="説明" data-tip="建てられる建物の大きさは、土地ごとに決まっている「用途地域」「建ぺい率」「容積率」で変わります。建ぺい率＝敷地に対する建築面積の割合、容積率＝敷地に対する延床面積の割合です。">?</button></h2>
       <div id="zone-auto" class="card zone-auto">調べています…</div>
       <div id="zone-guess" hidden>
         <fieldset class="choices grid2" id="townfeel">
@@ -82,70 +101,54 @@
         </div>
       </details>
       <div class="actions">
-        <button class="btn" data-next="3">戻る</button>
-        <button class="btn primary" data-next="5">次へ</button>
+        <button class="btn primary wide" data-next="5">次へ</button>
       </div>
     </section>
 
-    <section class="wstep" data-step="5" hidden>
-      <h2>どう使いたいですか</h2>
-      <fieldset class="choices grid2" id="focus">
-        <legend>使い道 <button type="button" class="help" aria-label="説明" data-tip="使い道を選ぶと「小さめ・中間・建ぺい率いっぱい」の3案を出します。決めていない場合は、自宅・賃貸・その他活用の3つを比べます。">?</button></legend>
-        <label><input type="radio" name="focus" value="house" checked> 自宅を建てたい</label>
-        <label><input type="radio" name="focus" value="rental"> 賃貸経営（アパート・賃貸併用）</label>
-        <label><input type="radio" name="focus" value="other"> 店舗・駐車場などの活用</label>
-        <label><input type="radio" name="focus" value=""> まだ決めていない（3つの使い道を比べる）</label>
-
-      </fieldset>
-      <fieldset class="choices grid2" id="stage">
-        <legend>検討の段階</legend>
-        <label><input type="radio" name="stage" value="own"> 土地を持っている（相続・空き地・建替え）</label>
-        <label><input type="radio" name="stage" value="buying"> 土地の購入を検討中</label>
-        <label><input type="radio" name="stage" value="curious" checked> 情報収集・なんとなく</label>
+    <section class="wstep q" data-step="5" hidden>
+      <h2 class="qtitle">どう使いたいですか</h2>
+      <p class="hint">使い道を選ぶと、その使い道で大きさ違いの3案（小さめ・中間・上限）を作ります。</p>
+      <fieldset class="cards" id="focus">
+        <legend class="sr">使い道</legend>
+        <label class="choice-card"><input type="radio" name="focus" value="house" checked><b>自宅を建てる</b><span>戸建て・二世帯</span></label>
+        <label class="choice-card"><input type="radio" name="focus" value="rental"><b>賃貸経営</b><span>アパート・賃貸併用</span></label>
+        <label class="choice-card"><input type="radio" name="focus" value="other"><b>店舗・駐車場など</b><span>店舗・事務所・駐車場</span></label>
+        <label class="choice-card"><input type="radio" name="focus" value=""><b>まだ決めていない</b><span>3つの使い道を1案ずつ比べる</span></label>
       </fieldset>
       <div class="actions">
-        <button class="btn" data-next="4">戻る</button>
-        <button class="btn primary" id="run-btn" data-next="6">3案を作る</button>
+        <button class="btn primary wide" id="run-btn" data-next="6">3案を作る</button>
       </div>
     </section>
 
-    <section class="wstep" data-step="6" hidden>
+    <section class="wstep result" data-step="6" hidden>
       <p id="pr-top" class="pr-top" hidden>【PR】このページはプロモーション（広告）を含みます</p>
       <div id="area-warn" class="card control-card" role="alert" hidden></div>
-      <div class="orient" id="orient">
-        <span class="orient-label">建物の向き</span>
-        <button type="button" class="btn small" id="rot-l" aria-label="左に15度回す">⟲ 15°</button>
-        <div class="orient-mid">
-          <b id="rot-val">自動</b>
-          <button type="button" class="linklike" id="rot-reset">自動に戻す</button>
-        </div>
-        <button type="button" class="btn small" id="rot-r" aria-label="右に15度回す">15° ⟳</button>
-      </div>
-      <div class="tabs" id="plan-tabs" role="tablist"></div>
-      <div id="plan-detail"></div>
-      <div id="context-box" class="card context"></div>
+      <div class="plan-cards" id="plan-tabs" role="tablist" aria-label="3つの案"></div>
+      <details class="card plan-more" id="plan-more"><summary>詳しい数字</summary><div id="plan-detail"></div></details>
+      <div id="ad-box"></div>
       <div id="site-info-box" class="card siteinfo"></div>
+      <div id="context-box" class="card context"></div>
+      <div id="site-summary"></div>
       <div id="export-box" class="card export" hidden>
         <b>開発用：制御データの書き出し</b>
         <p class="muted">3案×2視点の白模型・深度・線画・マスク・仕様（ZIP）を書き出します。</p>
         <button type="button" class="btn" id="export-btn">ZIPで書き出す</button>
         <span class="muted" id="export-status"></span>
       </div>
-      <div id="ad-box"></div>
-      <div id="site-summary"></div>
       <div class="card soon">
         <b>写真品質の建築イメージ（準備中）</b>
         <p>この3案をもとに、AIで外観を仕上げた画像を作る機能を準備しています。結果は専用のURLで見られます（メールアドレスの登録は不要です）。</p>
       </div>
-      <div class="caution small">
+      <details class="card caution small">
+        <summary>ご利用にあたって</summary>
         <ul>
           <li>表示は<strong>参考イメージと概算</strong>です。設計図・見積もりではありません。</li>
           <li>建築できること、法令に適合することを保証しません。北側斜線・日影規制・高度地区・地区計画などは考慮していません。</li>
           <li>概算工事費は当サービスの暫定の目安で、地域・仕様・時期により大きく変わります。</li>
           <li>本サービスは運営者が提供するもので、国土交通省など公的機関が提供・保証するものではありません。本サービスに関する責任は運営者が負います。</li>
         </ul>
-      </div>
-      <div class="actions">
+      </details>
+      <div class="actions two">
         <button class="btn" data-next="5">条件を変える</button>
         <button class="btn" id="restart-btn" type="button">最初から</button>
       </div>
@@ -157,6 +160,12 @@
     <div id="viewer" class="viewer" hidden></div>
     <div id="map-tools" class="map-tools">
       <button type="button" id="layer-btn" class="btn small">地図に切替</button>
+    </div>
+    <div id="crosshair" class="crosshair" aria-hidden="true" hidden></div>
+    <div class="orient" id="orient" hidden>
+      <button type="button" class="btn small round" id="rot-l" aria-label="建物を左に15度回す">⟲</button>
+      <div class="orient-mid"><b id="rot-val">自動</b><button type="button" class="linklike" id="rot-reset">自動に戻す</button></div>
+      <button type="button" class="btn small round" id="rot-r" aria-label="建物を右に15度回す">⟳</button>
     </div>
   </main>
 </div>

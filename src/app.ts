@@ -24,21 +24,35 @@ interface State {
   purposeSet?: boolean;
   showContext?: boolean;
   rotOffset?: number;
+  situation?: Situation;
 }
+type Situation = "house" | "land" | "akiya" | "sell" | "inherit";
+const SITUATIONS: Situation[] = ["house", "land", "akiya", "sell", "inherit"];
+const STEP_TITLES = ["状況", "土地の場所", "敷地の形", "前面道路", "土地のルール", "使い道", "結果"];
 interface ZoneApi { available: boolean; found?: boolean; zoneName?: string | null; bcr?: number | null; far?: number | null; city?: string; source?: string; note?: string }
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySelector(s) as T;
 const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(document.querySelectorAll(s)) as T[];
 const KEY = "tochi-mirai:v1";
 
-const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+const state: State = load() ?? { step: 0, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
 applyFocusParam(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
 
 // ガイドページなどから ?focus=house|rental|other で来たら、使い道の初期値にする（入力の途中なら上書きしない）
 function applyFocusParam(st: State) {
-  const f = new URLSearchParams(location.search).get("focus");
+  const q = new URLSearchParams(location.search);
+  const f = q.get("focus");
   if ((f === "house" || f === "rental" || f === "other") && !st.purposeSet) st.focus = f;
+  // トップページの入口から ?s=house|land|akiya|sell|inherit で来たら、状況を選んだ状態で始める
+  const sit = q.get("s") as Situation | null;
+  if (sit && SITUATIONS.includes(sit)) setSituation(st, sit);
+  else if (f === "house" && !st.situation) st.situation = "house";
+  else if ((f === "rental" || f === "other") && !st.situation) st.situation = "land";
+}
+function setSituation(st: State, sit: Situation) {
+  st.situation = sit;
+  if (!st.purposeSet) { if (sit === "house") st.focus = "house"; else if (sit === "land") st.focus = "rental"; }
 }
 function load(): State | null { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* 保存できない環境では無視 */ } }
@@ -124,8 +138,11 @@ function redrawMap() {
     pts.forEach((p, i) => {
       const q = pts[(i + 1) % pts.length];
       const choice = state.edges[i] ?? "none";
-      edgeFeats.push({ type: "Feature", properties: { color: EDGE_COLORS[choice], road: choice !== "none" }, geometry: { type: "LineString", coordinates: [p, q] } });
-      const el = document.createElement("div"); el.className = "edge-label" + (choice !== "none" ? " road" : ""); el.textContent = String(i + 1);
+      edgeFeats.push({ type: "Feature", properties: { color: state.step === 3 && i === selEdge ? "#2f6f5e" : EDGE_COLORS[choice], road: choice !== "none" || (state.step === 3 && i === selEdge) }, geometry: { type: "LineString", coordinates: [p, q] } });
+      const el = document.createElement("button"); el.type = "button";
+      el.className = "edge-label" + (choice !== "none" ? " road" : "") + (state.step === 3 && i === selEdge ? " sel" : "");
+      el.textContent = String(i + 1); el.setAttribute("aria-label", `辺${i + 1}を選ぶ`);
+      el.addEventListener("click", (ev) => { ev.stopPropagation(); if (state.step === 3) { selEdge = i; redrawMap(); renderEdgeList(); } });
       edgeMarkers.push(new maplibregl.Marker({ element: el }).setLngLat([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]).addTo(map));
     });
   }
@@ -160,25 +177,29 @@ function go(step: number) {
   $$("section.wstep").forEach(s => (s.hidden = Number(s.dataset.step) !== step));
   paintStepper();
   const show3d = step === 6;
+  // 画面の種類：q＝質問だけ（スマホでは地図を隠す）、map＝地図の操作、result＝3D
+  document.body.dataset.mode = show3d ? "result" : (step === 0 || step === 4 || step === 5) ? "q" : "map";
   $("#viewer").hidden = !show3d;
   $("#map").style.visibility = show3d ? "hidden" : "visible";
   $("#map-tools").hidden = show3d;
+  $("#crosshair").hidden = step !== 2;
+  $("#orient").hidden = !show3d;
   if (step === 2) { updateArea(); zoomWarn(); }
   if (step === 3) renderEdgeList();
   if (step === 4) renderZone();
-  if (show3d) renderResult(); else map.resize();
+  if (show3d) renderResult(); else requestAnimationFrame(() => map.resize());
   redrawMap();
   if (step === 3 && state.points.length >= 3) {
     const b = new maplibregl.LngLatBounds(); state.points.forEach(p => b.extend(p));
     map.fitBounds(b, { padding: 80, maxZoom: 20, duration: 400 });
   }
   $("#panel").scrollTop = 0;
-  if (window.matchMedia("(max-width: 760px)").matches) window.scrollTo({ top: 0 });
 }
 
 /** 各ステップが入力済みか */
 function isDone(n: number): boolean {
   switch (n) {
+    case 0: return !!state.situation;
     case 1: return !!state.located || state.points.length > 0;
     case 2: return state.points.length >= 3;
     case 3: return state.edges.some(e => e !== "none");
@@ -189,22 +210,30 @@ function isDone(n: number): boolean {
   }
 }
 function paintStepper() {
-  $$<HTMLButtonElement>("#stepper button").forEach(b => {
-    const n = Number(b.dataset.step);
-    const active = n === state.step, done = isDone(n);
-    b.classList.toggle("active", active);
-    b.classList.toggle("done", !active && done);
-    b.classList.toggle("todo", !active && !done);
-    b.title = done ? "入力済み" : "未入力";
-    if (active) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
-  });
+  const st = state.step;
+  $("#prog-title").textContent = STEP_TITLES[st];
+  $("#prog-count").textContent = st < 6 ? `${st + 1} / 6` : "";
+  ($("#prog-bar") as HTMLElement).style.width = `${Math.round((Math.min(st, 6) / 6) * 100)}%`;
 }
 
 document.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement).closest("[data-next]") as HTMLElement | null;
   if (t) { e.preventDefault(); if (t.id === "run-btn") { state.purposeSet = true; } go(Number(t.dataset.next)); return; }
-  const s = (e.target as HTMLElement).closest("#stepper button") as HTMLElement | null;
-  if (s) { e.preventDefault(); go(Number(s.dataset.step)); }
+  const c = (e.target as HTMLElement).closest("[data-situation]") as HTMLElement | null;
+  if (c) {
+    setSituation(state, c.dataset.situation as Situation); save(); syncRadios(); paintSituation();
+    track("situation", { situation: state.situation });
+    go(1);
+  }
+});
+$("#back-btn").addEventListener("click", () => { if (state.step <= 0) location.href = "/"; else go(state.step - 1); });
+function paintSituation() { $$("[data-situation]").forEach(b => b.classList.toggle("selected", b.dataset.situation === state.situation)); }
+
+// Step2：中央の＋の位置に角を追加（地図を直接タップするより狙いやすい）
+$("#add-btn").addEventListener("click", () => {
+  if (map.getZoom() < MIN_DRAW_ZOOM) { zoomWarn(); return; }
+  const c = map.getCenter(); state.points.push([c.lng, c.lat]); state.edges = [];
+  save(); redrawMap(); updateArea(); paintStepper();
 });
 
 // Step1：住所検索（国土地理院 住所検索API）
@@ -238,14 +267,15 @@ $("#sample-btn").addEventListener("click", () => {
   state.points = local.map(([x, y]) => [c[0] + x * dLng, c[1] + y * dLat]);
   state.edges = ["4to6", "none", "none", "none"];
   state.zone = "r1mid"; state.bcr = ""; state.far = ""; state.sample = true; state.zoneSource = "guess"; state.located = true; state.purposeSet = true;
+  state.situation ??= "house";
   save(); track("sample_used"); go(6);
 });
 
 $("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#restart-btn").addEventListener("click", () => {
-  Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null, rotOffset: 0 });
-  result = null; save(); track("restart"); go(1);
+  Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null, rotOffset: 0, situation: undefined });
+  result = null; save(); track("restart"); paintSituation(); go(0);
 });
 
 let photo = true;
@@ -256,26 +286,47 @@ $("#layer-btn").addEventListener("click", () => {
   $("#layer-btn").textContent = photo ? "地図に切替" : "航空写真に切替";
 });
 
-// Step3：道路辺
+// Step3：道路辺。地図の番号をタップして辺を選び、道路の幅を大きなボタンで選ぶ
+let selEdge = 0;
+const WIDTH_OPTS: [EdgeChoice, string, string][] = [
+  ["lt4", "車1台がやっと通れる", "4m未満"], ["4to6", "車がすれ違える", "4〜6m"],
+  ["6to12", "歩道のある道路", "6〜12m"], ["gte12", "大きな通り", "12m以上"], ["none", "道路に面していない", ""],
+];
+const WIDTH_SHORT: Record<EdgeChoice, string> = { none: "道路なし", lt4: "4m未満", "4to6": "4〜6m", "6to12": "6〜12m", gte12: "12m以上" };
 function renderEdgeList() {
-  const ul = $("#edge-list"); ul.innerHTML = "";
+  const chips = $("#edge-chips"), q = $("#edge-q");
   const n = state.points.length;
-  if (n < 3) { ul.innerHTML = "<li class='muted'>先に敷地の形を描いてください。</li>"; return; }
+  if (n < 3) { chips.innerHTML = ""; q.innerHTML = "<p class='muted'>先に敷地の形を描いてください。</p>"; return; }
   if (state.edges.length !== n) state.edges = Array.from({ length: n }, (_, i) => state.edges[i] ?? "none");
-  const opts: [EdgeChoice, string][] = [["none", "道路に接していない"], ["lt4", "道路（幅4m未満）"], ["4to6", "道路（幅4〜6m）"], ["6to12", "道路（幅6〜12m）"], ["gte12", "道路（幅12m以上）"]];
-  state.edges.forEach((choice, i) => {
-    const li = document.createElement("li");
-    const sel = document.createElement("select");
-    for (const [v, label] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = label; o.selected = v === choice; sel.appendChild(o); }
-    sel.addEventListener("change", () => { state.edges[i] = sel.value as EdgeChoice; save(); redrawMap(); renderEdgeList(); paintStepper(); });
-    const lab = document.createElement("span"); lab.className = "edge-no"; lab.textContent = `辺${i + 1}`;
-    const len = document.createElement("span"); len.className = "muted"; len.textContent = `${edgeLen(i).toFixed(1)}m`;
-    li.append(lab, len, sel); ul.appendChild(li);
+  if (selEdge >= n) selEdge = 0;
+  chips.innerHTML = "";
+  state.edges.forEach((w, i) => {
+    const b = document.createElement("button"); b.type = "button";
+    b.className = "edge-chip" + (i === selEdge ? " sel" : "") + (w !== "none" ? " road" : "");
+    b.innerHTML = `<b>辺${i + 1}</b><span>${edgeLen(i).toFixed(1)}m・${WIDTH_SHORT[w]}</span>`;
+    b.addEventListener("click", () => { selEdge = i; redrawMap(); renderEdgeList(); });
+    chips.appendChild(b);
   });
-  if (!state.edges.some(e => e !== "none")) {
-    const li = document.createElement("li"); li.className = "muted"; li.textContent = "少なくとも1つの辺を道路にしてください（道路に接していない土地には原則建築できません）。";
-    ul.appendChild(li);
+  const cur = state.edges[selEdge];
+  q.innerHTML = `<p class="edge-q-title"><b>辺${selEdge + 1}</b>（約${edgeLen(selEdge).toFixed(1)}m）の前の道路は、どれくらいの幅ですか</p>`;
+  const grid = document.createElement("div"); grid.className = "width-opts";
+  for (const [v, label, sub] of WIDTH_OPTS) {
+    const b = document.createElement("button"); b.type = "button";
+    b.className = "width-opt" + (cur === v ? " sel" : "") + (v === "none" ? " none" : "");
+    b.setAttribute("aria-pressed", String(cur === v));
+    b.innerHTML = `<span>${label}</span>${sub ? `<small>${sub}</small>` : ""}`;
+    b.addEventListener("click", () => setWidth(v));
+    grid.appendChild(b);
   }
+  q.appendChild(grid);
+  const unk = document.createElement("button"); unk.type = "button"; unk.className = "linklike unknown";
+  unk.textContent = "わからない（4〜6mとして計算する）"; unk.addEventListener("click", () => setWidth("4to6"));
+  q.appendChild(unk);
+  $("#edge-need").hidden = state.edges.some(e => e !== "none");
+}
+function setWidth(v: EdgeChoice) {
+  state.edges[selEdge] = v; save(); redrawMap(); renderEdgeList(); paintStepper();
+  track("edge_width", { w: v });
 }
 
 // Step4：用途地域（公的データから半自動取得 → だめなら街の様子から推定 → 詳細は手入力）
@@ -375,15 +426,17 @@ function paintSiteInfo() {
   const warn = $("#area-warn");
   warn.hidden = !ctrl;
   warn.innerHTML = ctrl ? CONTROL_WARNING : "";
-  $("#site-info-box").innerHTML = siteInfoHtml(siteInfo, result.site.area);
+  const box = $("#site-info-box");
+  const open = !!box.querySelector("details")?.open;
+  const html = siteInfoHtml(siteInfo, result.site.area).replace(/^<b>この土地の参考情報<\/b>/, "");
+  const n = (html.match(/class="attn"/g) || []).length;
+  box.innerHTML = `<details${open ? " open" : ""}><summary><span>この土地の参考情報</span>${n ? `<span class="badge">確認したい点 ${n}</span>` : ""}</summary>${html}</details>`;
 }
 
 // Step5
 $$<HTMLInputElement>("input[name=focus]").forEach(r => r.addEventListener("change", () => { state.focus = r.value as State["focus"]; state.purposeSet = true; save(); paintStepper(); }));
-$$<HTMLInputElement>("input[name=stage]").forEach(r => r.addEventListener("change", () => { state.stage = r.value; state.purposeSet = true; save(); paintStepper(); }));
 function syncRadios() {
   $$<HTMLInputElement>("input[name=focus]").forEach(r => (r.checked = r.value === state.focus));
-  $$<HTMLInputElement>("input[name=stage]").forEach(r => (r.checked = r.value === state.stage));
 }
 
 // Step6：計算と表示
@@ -401,7 +454,7 @@ function compute(): boolean {
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
-  track("run", { focus: state.focus || "compare", stage: state.stage, zone: state.zone, source: state.zoneSource, areaBucket: areaBucket(result.site.area), roads: roadEdges.length });
+  track("run", { focus: state.focus || "compare", situation: state.situation ?? "none", zone: state.zone, source: state.zoneSource, areaBucket: areaBucket(result.site.area), roads: roadEdges.length });
   return true;
 }
 
@@ -420,12 +473,18 @@ function renderResult() {
   renderContext(result);
   const tabs = $("#plan-tabs"); tabs.innerHTML = "";
   result.plans.forEach((p, i) => {
-    const b = document.createElement("button"); b.type = "button"; b.role = "tab"; b.className = "tab" + (i === activePlan ? " active" : "");
-    const label = p.size ? p.title.replace(/^[ABC]案：/, "") : p.title.replace(/^[ABC]案：/, "");
-    b.innerHTML = `<b>${p.id}案</b><span>${esc(label)}</span>`;
-    b.addEventListener("click", () => { activePlan = i; renderResult(); track("plan_tab", { plan: p.id, size: p.size, use: p.use }); });
+    const m = p.metrics;
+    const b = document.createElement("button"); b.type = "button"; b.role = "tab"; b.className = "plan-card" + (i === activePlan ? " active" : "");
+    b.setAttribute("aria-selected", String(i === activePlan));
+    const label = p.title.replace(/^[ABC]案：/, "");
+    const nums = m.gfa > 0
+      ? `<span><small>延床</small>約${m.gfa}㎡</span><span><small>階数</small>${m.floors}階</span><span><small>概算</small>${yen(m.costMin)}〜</span>`
+      : `<span><small>駐車</small>${m.parking}台</span><span><small>概算</small>${yen(m.costMin)}〜</span>`;
+    b.innerHTML = `<b>${p.id} ${esc(label)}</b><span class="nums">${nums}</span><span class="pos">${i + 1} / ${result!.plans.length}</span>`;
+    b.addEventListener("click", () => { if (activePlan === i) return; activePlan = i; renderResult(); track("plan_tab", { plan: p.id, size: p.size, use: p.use }); });
     tabs.appendChild(b);
   });
+  requestAnimationFrame(() => (tabs.children[activePlan] as HTMLElement | undefined)?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }));
   const p = result.plans[activePlan];
   viewer.setPlan(p, result.site.rotation);
   paintOrient();
@@ -603,7 +662,7 @@ $("#export-btn").addEventListener("click", async () => {
     const plans = result.plans;
     const blob = await exportControlPackage(viewer, result, plans, (i) => viewer!.setPlan(plans[i], result!.site.rotation), {
       context: viewer.contextDebug() ? "plateau" : "footprints-or-none",
-      focus: state.focus || "compare", stage: state.stage, sample: !!state.sample,
+      focus: state.focus || "compare", stage: state.situation ?? "", sample: !!state.sample,
     });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -623,4 +682,7 @@ track("wizard_view", { mobile: matchMedia("(max-width: 760px)").matches });
 syncRadios();
 const params = new URLSearchParams(location.search);
 if (params.has("sample")) $("#sample-btn").click();
-else go(state.step === 6 && state.points.length >= 3 ? 6 : Math.min(state.step, state.points.length >= 3 ? 5 : 2) || 1);
+else if (!state.situation) go(0);
+else if (state.step === 0 && params.has("s")) go(1);
+else go(state.step === 6 && state.points.length >= 3 ? 6 : Math.min(state.step, state.points.length >= 3 ? 5 : 2));
+paintSituation();

@@ -162,3 +162,96 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .next-step .ad { margin: 0; }
 .next-step.quiet .ad { border-color: var(--line); }
 .next-step.quiet .ad b { color: var(--ink); font-weight: 500; }
+
+/* ===== 2026-11-06 画面構成の作り直し：入力は一問一答、結果は3D＋下のシート ===== */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* ヘッダーの進み具合 */
+.progress { display: flex; align-items: center; gap: 10px; flex: 1; max-width: 520px; margin: 0 16px; min-width: 0; }
+.progress .back { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 0; background: transparent; color: var(--ink); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.progress .back:hover { background: #f1eee6; }
+.prog-label { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; font-size: .95rem; }
+.prog-label span { font-size: .8rem; color: var(--ink-soft); }
+.prog-bar { flex: 1; height: 5px; border-radius: 3px; background: #e5dfd2; overflow: hidden; min-width: 40px; }
+.prog-bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .25s; }
+
+/* 質問の見出しと大きな選択肢 */
+.wstep .qtitle { font-size: 1.45rem; line-height: 1.45; margin: 4px 0 .4em; }
+.cards { border: 0; padding: 0; margin: 12px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.choice-card { display: flex; flex-direction: column; gap: 2px; text-align: left; width: 100%; min-height: 64px; padding: 12px 16px; font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; position: relative; }
+.choice-card b { font-size: 1.02rem; }
+.choice-card span { font-size: .85rem; color: var(--ink-soft); }
+.choice-card:hover { border-color: var(--accent); }
+.choice-card input { position: absolute; opacity: 0; pointer-events: none; }
+.choice-card.selected, .choice-card:has(input:checked) { border: 2px solid var(--accent); background: var(--accent-soft); padding: 11px 15px; }
+.choice-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 下に固定する決定ボタン */
+.btn.wide { width: 100%; min-height: 52px; font-size: 1rem; }
+.actions { position: sticky; bottom: 0; background: var(--card); padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); margin-top: 16px; z-index: 5; }
+.actions.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.actions.two .btn { min-height: 48px; }
+
+/* 敷地を描く：中央の＋と追加ボタン */
+.crosshair { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; pointer-events: none; z-index: 3;
+  background: radial-gradient(circle, transparent 15px, #1d2a2a 16px, #1d2a2a 18px, transparent 19px),
+    linear-gradient(#1d2a2a, #1d2a2a) center / 2px 100% no-repeat, linear-gradient(#1d2a2a, #1d2a2a) center / 100% 2px no-repeat;
+  filter: drop-shadow(0 0 2px #fff); }
+.draw-tools { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin: 12px 0 0; }
+.draw-tools .btn { min-height: 44px; }
+.draw-tools .btn.add { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; font-size: .78rem; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; line-height: 1.2; }
+.draw-tools .btn.add span { font-size: 1.5rem; line-height: 1; }
+
+/* 前面道路 */
+.edge-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; }
+.edge-chip { flex: none; font: inherit; display: flex; flex-direction: column; align-items: flex-start; padding: 6px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; cursor: pointer; min-height: 44px; }
+.edge-chip span { font-size: .75rem; color: var(--ink-soft); }
+.edge-chip.road { background: #fdf0e6; }
+.edge-chip.sel { border: 2px solid var(--accent); padding: 5px 11px; }
+.edge-q-title { margin: 10px 0 8px; font-size: .95rem; }
+.width-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.width-opt { font: inherit; min-height: 56px; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.width-opt span { font-size: .9rem; }
+.width-opt small { font-size: .75rem; color: var(--ink-soft); }
+.width-opt.none { grid-column: 1 / -1; min-height: 44px; }
+.width-opt.sel { border: 2px solid var(--accent); background: var(--accent-soft); font-weight: 700; }
+.linklike.unknown { display: block; margin: 12px auto 0; font-size: .9rem; padding: 6px; }
+button.edge-label { border: 0; cursor: pointer; min-width: 30px; height: 30px; border-radius: 15px; font-size: 13px; }
+button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px solid #fff; }
+
+/* 結果：横にスワイプできる案のカード */
+.plan-cards { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 8px; margin: 0 -2px 4px; }
+.plan-card { flex: 0 0 86%; max-width: 340px; scroll-snap-align: center; font: inherit; text-align: left; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.plan-card.active { border: 2px solid var(--accent); padding: 11px 13px; }
+.plan-card > b { font-size: 1rem; padding-right: 48px; }
+.plan-card .pos { position: absolute; top: 12px; right: 14px; font-size: .75rem; color: var(--ink-soft); }
+.plan-card .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.plan-card .nums span { font-size: 1.02rem; font-weight: 700; white-space: nowrap; }
+.plan-card .nums small { display: block; font-size: .72rem; font-weight: 400; color: var(--ink-soft); }
+.plan-more { padding: 10px 14px; }
+.plan-more .card.plan { border: 0; padding: 8px 0 0; margin: 0; }
+.siteinfo summary { display: flex; align-items: center; gap: 8px; }
+.siteinfo summary span:first-child { flex: 1; }
+.siteinfo .badge { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 1px 8px; font-size: .75rem; font-weight: 700; }
+.caution summary { font-weight: 700; }
+
+/* 3Dの上の向きボタン */
+.stage .orient { position: absolute; right: 12px; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 6px; margin: 0; background: rgba(255,253,248,.92); border-radius: 26px; padding: 4px; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
+.stage .orient[hidden] { display: none; }
+.stage .orient .btn.round { width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 1.1rem; box-shadow: none; }
+.stage .orient .orient-mid { min-width: 84px; max-width: 150px; }
+
+/* スマホ：上に地図／3D、下にシート。質問の画面では地図を隠す */
+@media (max-width: 760px) {
+  .app-body { height: 100vh; height: 100dvh; overflow: hidden; }
+  .app-body header.site .wrap { height: 56px; padding: 0 8px; flex-wrap: nowrap; gap: 0; }
+  .app-body header.site .brand, .app-body nav.desk { display: none; }
+  .progress { margin: 0; max-width: none; }
+  .app { display: grid; grid-template-columns: 1fr; grid-template-rows: 55% 1fr; flex: 1; min-height: 0; }
+  .stage { order: 0; height: auto; min-height: 0; }
+  .panel { order: 1; overflow-y: auto; border-top: 0; margin-top: -16px; position: relative; z-index: 6; border-radius: 18px 18px 0 0; box-shadow: 0 -4px 14px rgba(0,0,0,.12); padding: 16px 18px 0; }
+  body[data-mode="q"] .app { grid-template-rows: 0 1fr; }
+  body[data-mode="q"] .stage { visibility: hidden; }
+  body[data-mode="q"] .panel { margin-top: 0; border-radius: 0; box-shadow: none; }
+  body[data-mode="result"] .app { grid-template-rows: 46% 1fr; }
+  .wstep .qtitle { font-size: 1.35rem; }
+}
