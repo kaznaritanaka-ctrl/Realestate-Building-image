@@ -281,7 +281,7 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 }
 
 /* 頂点：見た目は小さいまま、つかめる範囲を広げる（指で44px以上） */
-.vtx { position: relative; touch-action: none; }
+.vtx { touch-action: none; } /* 位置は maplibregl-marker の position:absolute に任せる（relative にすると頂点がずれる） */
 .vtx::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; }
 @media (pointer: coarse) { .vtx { width: 20px; height: 20px; } .vtx::after { inset: -16px; } }
 
