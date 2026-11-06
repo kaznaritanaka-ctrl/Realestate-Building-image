@@ -25,12 +25,12 @@ export class Viewer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     el.appendChild(this.renderer.domElement);
-    this.scene.background = new THREE.Color(0xeef1ec);
+    this.scene.background = new THREE.Color(0xf3f5f6);
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 2000);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI * 0.48;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c2b5, 1.6));
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc2ccd0, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(-40, 60, 30);
     sun.castShadow = true;
@@ -160,7 +160,7 @@ export class Viewer {
     const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
     const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), 10);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(span * 8, span * 8), new THREE.MeshLambertMaterial({ color: 0xe4e8df }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(span * 8, span * 8), new THREE.MeshLambertMaterial({ color: 0xe9edee }));
     ground.rotation.x = -Math.PI / 2; ground.position.set(cu, -0.02, -cv); ground.receiveShadow = true;
     this.siteGroup.add(ground);
 
@@ -169,7 +169,7 @@ export class Viewer {
       m.rotation.x = -Math.PI / 2; m.position.y = 0.0; m.receiveShadow = true;
       this.siteGroup.add(m);
     }
-    const site = new THREE.Mesh(shapeGeom(P), new THREE.MeshLambertMaterial({ color: 0xdbe6d3 }));
+    const site = new THREE.Mesh(shapeGeom(P), new THREE.MeshLambertMaterial({ color: 0xdcebe3 }));
     site.rotation.x = -Math.PI / 2; site.position.y = 0.01; site.receiveShadow = true;
     this.siteGroup.add(site);
     const pts = P.map(([u, v]) => new THREE.Vector3(u, 0.03, -v));
