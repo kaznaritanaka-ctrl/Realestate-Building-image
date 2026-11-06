@@ -348,9 +348,13 @@ $("#pdf-btn").addEventListener("click", async () => {
     <p class="small">表示は参考イメージと概算です。設計図・見積もりではなく、建築できること・法令に適合することを保証するものではありません。概算工事費は当サービスの暫定の目安です。</p>
     <p class="small">この結果をもう一度開く：${esc(shareUrl())}</p>`;
   track("save_result", { via: "pdf" });
-  await frames();
-  window.print();
+  $("#print-view").hidden = false; $("#print-view").scrollTop = 0;
+  ($("#pv-print") as HTMLButtonElement).focus();
 });
+// 印刷はボタンを押した直後に呼ぶ（iPhoneのSafariは、間に処理を挟むと止める）
+$("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
+$("#pv-close").addEventListener("click", () => { $("#print-view").hidden = true; ($("#pdf-btn") as HTMLButtonElement).focus(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#print-view").hidden) $("#print-view").hidden = true; });
 
 // 外観のスタイル（和風・ホワイト・ブラック）
 function paintStyle() {

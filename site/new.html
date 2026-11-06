@@ -181,7 +181,15 @@
     </div>
   </main>
 </div>
-<div id="print-sheet" class="print-sheet"></div>
+<div id="print-view" class="print-view" role="dialog" aria-modal="true" aria-labelledby="pv-title" hidden>
+  <div class="pv-bar">
+    <button type="button" class="btn" id="pv-close">閉じる</button>
+    <b id="pv-title">保存内容の確認</b>
+    <button type="button" class="btn primary" id="pv-print">PDFで保存</button>
+  </div>
+  <p class="pv-hint">「PDFで保存」を押すと印刷の画面が開きます。パソコン・Androidは送信先で「PDFとして保存」、iPhoneは印刷の画面の共有ボタンから「ファイルに保存」を選んでください。</p>
+  <div id="print-sheet" class="print-sheet"></div>
+</div>
 <script src="/assets/app.js" defer></script>
 </body>
 </html>

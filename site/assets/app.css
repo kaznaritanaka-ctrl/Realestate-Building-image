@@ -303,12 +303,27 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 .keep b { display: block; margin-bottom: 8px; }
 .keep-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .keep-btns .btn { min-height: 44px; padding: 6px 4px; font-size: .85rem; }
-.print-sheet { display: none; }
+.print-view { position: fixed; inset: 0; z-index: 100; background: #f6f3ec; overflow-y: auto; }
+.print-view[hidden] { display: none; }
+.pv-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: #fffdf8; border-bottom: 1px solid var(--line); }
+.pv-bar b { font-size: .95rem; text-align: center; }
+.pv-bar .btn { min-height: 44px; }
+.pv-hint { margin: 10px 16px 0; font-size: .8rem; color: var(--ink-soft); line-height: 1.6; }
+.print-sheet { display: block; max-width: 760px; margin: 12px auto 40px; background: #fff; padding: 18px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: .9rem; }
+.print-sheet h1 { font-size: 1.15rem; margin: 0 0 4px; }
+.print-sheet h2 { font-size: 1rem; }
+.print-sheet .meta, .print-sheet .small { color: var(--ink-soft); font-size: .8rem; }
+.print-sheet .pplan { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 14px 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.print-sheet .pplan img { width: 100%; max-width: 360px; border: 1px solid var(--line); border-radius: 6px; }
+.print-sheet .card { border: 0; padding: 0; margin: 0; }
+@media (min-width: 640px) { .print-sheet .pplan { grid-template-columns: 300px 1fr; } }
 @media print {
   @page { size: A4; margin: 12mm; }
   body.app-body { height: auto !important; overflow: visible !important; display: block !important; background: #fff; }
-  body.app-body > *:not(.print-sheet) { display: none !important; }
-  .print-sheet { display: block; color: #1d2a2a; font-size: 10.5pt; }
+  body.app-body > *:not(.print-view) { display: none !important; }
+  .print-view { position: static; overflow: visible; background: #fff; }
+  .pv-bar, .pv-hint { display: none !important; }
+  .print-sheet { display: block; max-width: none; margin: 0; padding: 0; border: 0; color: #1d2a2a; font-size: 10.5pt; }
   .print-sheet h1 { font-size: 15pt; margin: 0 0 2mm; }
   .print-sheet h2 { font-size: 12pt; margin: 4mm 0 2mm; }
   .print-sheet .meta, .print-sheet .small { color: #4d5b5a; font-size: 8.5pt; }
@@ -318,3 +333,5 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
   .print-sheet .pinfo { break-inside: avoid; }
   .print-sheet .kv th { width: 38%; }
 }
+.pv-bar .btn { white-space: nowrap; padding: 8px 14px; }
+.pv-bar b { flex: 1; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
