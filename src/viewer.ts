@@ -4,6 +4,30 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { EngineResult, Plan, Box } from "../engine/engine.ts";
 import { PlateauContext, FootprintContext, type ContextOptions, type FootprintBuilding } from "./context.ts";
 import { linearDepthMaterial, normalMaterial } from "./passes.ts";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+
+// 自作の車モデル（前＝-Z、上＝+Y、原点＝地面の中央）。結果画面に入ったときに一度だけ読み込む
+const CAR_FILES = ["car_liftback_v2", "car_minivan_v1", "car_kei_v1"];
+let carModels: THREE.Object3D[] | null = null;
+let carEnv: THREE.Texture | null = null;
+let carLoading: Promise<void> | null = null;
+function loadCars(): Promise<void> {
+  if (carLoading) return carLoading;
+  const loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/assets/draco/"));
+  carLoading = Promise.all(CAR_FILES.map(f => loader.loadAsync(`/assets/models/${f}.glb`).then(g => {
+    g.scene.traverse(o => {
+      const m = o as THREE.Mesh; if (!m.isMesh) return;
+      m.castShadow = true; m.receiveShadow = true;
+      for (const mat of (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]) {
+        if ("envMap" in mat) { mat.envMap = carEnv; mat.envMapIntensity = 0.7; mat.needsUpdate = true; }
+      }
+    });
+    return g.scene;
+  }))).then(list => { carModels = list; }).catch(() => { carModels = []; /* 読み込めなければ箱の車のまま */ });
+  return carLoading;
+}
 
 export class Viewer {
   private renderer: THREE.WebGLRenderer;
@@ -34,6 +58,8 @@ export class Viewer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.autoUpdate = false;
+    // 車の塗装やガラスの映り込み用の環境マップ（車の材質だけに使う。シーン全体に掛けると地面や建物が白飛びする）
+    if (!carEnv) { const pmrem = new THREE.PMREMGenerator(this.renderer); carEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose(); }
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     el.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color(0xf3f5f6);
@@ -198,6 +224,7 @@ export class Viewer {
 
   setSite(res: EngineResult) {
     this.requestRender(0, true);
+    void loadCars(); // 駐車場の車を先に読み込んでおく
     clear(this.siteGroup);
     const P = res.site.polygonUV;
     this.sitePoly = P as [number, number][];
@@ -293,8 +320,10 @@ export class Viewer {
     plan.stalls.forEach((s, i) => {
       this.planGroup.add(stallLines(s));
       // 月極駐車場は半分ほど、ほかは全区画に車を置く
-      if (plan.use !== "other" || i % 2 === 0) this.planGroup.add(car(s, CAR_COLORS[i % CAR_COLORS.length]));
+      if (plan.use !== "other" || i % 2 === 0) this.planGroup.add(carModels?.length ? modelCar(s, carModels[i % carModels.length]) : car(s, CAR_COLORS[i % CAR_COLORS.length]));
     });
+    // 車のモデルがまだなら読み込んで、届いたら置き直す
+    if (plan.stalls.length && !carModels) loadCars().then(() => { if (this.lastPlan?.plan === plan && carModels?.length) this.setPlan(plan, rotation); });
   }
 
   snapshot(type = "image/png", quality?: number): string {
@@ -344,7 +373,14 @@ function stallLines(s: { u0: number; v0: number; u1: number; v1: number }): THRE
   return g;
 }
 
-// 普通自動車（全長4.4m・全幅1.7m）：車体・客室・窓・タイヤ
+// 車のモデルを区画の中央に置く（前を区画の奥に向けて頭から駐車）
+function modelCar(s: { u0: number; v0: number; u1: number; v1: number }, model: THREE.Object3D): THREE.Object3D {
+  const c = model.clone(true);
+  c.position.set((s.u0 + s.u1) / 2, 0, -(s.v0 + s.v1) / 2);
+  return c;
+}
+
+// 普通自動車（全長4.4m・全幅1.7m）：車体・客室・窓・タイヤ。車のモデルが読み込めないときの代わり
 function car(s: { u0: number; v0: number; u1: number; v1: number }, color: number): THREE.Group {
   const g = new THREE.Group();
   const paint = new THREE.MeshLambertMaterial({ color });
