@@ -292,3 +292,9 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 .edge-chip b { font-size: .9rem; }
 .edge-chip span { font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .edge-chip.road .w { color: #b4561c; font-weight: 700; }
+
+/* 3Dの外観スタイル切り替え（左上） */
+.stage .style-pick { position: absolute; left: 12px; top: 12px; z-index: 4; display: flex; gap: 2px; background: rgba(255,253,248,.94); border-radius: 22px; padding: 3px; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
+.stage .style-pick[hidden] { display: none; }
+.style-pick button { font: inherit; font-size: .82rem; height: 38px; padding: 0 12px; border: 0; border-radius: 19px; background: transparent; color: var(--ink); cursor: pointer; }
+.style-pick button[aria-checked="true"] { background: var(--accent); color: #fff; font-weight: 700; }

@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import { computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
-import { Viewer } from "./viewer.ts";
+import { Viewer, type ExteriorStyle } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
@@ -25,6 +25,7 @@ interface State {
   showContext?: boolean;
   rotOffset?: number;
   situation?: Situation;
+  style?: ExteriorStyle;
 }
 type Situation = "house" | "land" | "akiya" | "sell" | "inherit";
 const SITUATIONS: Situation[] = ["house", "land", "akiya", "sell", "inherit"];
@@ -189,6 +190,7 @@ function go(step: number) {
   $("#map-tools").hidden = show3d;
   $("#crosshair").hidden = step !== 2;
   $("#orient").hidden = !show3d;
+  $("#style-pick").hidden = !show3d;
   if (step === 2) { updateArea(); zoomWarn(); }
   if (step === 3) renderEdgeList();
   if (step === 4) renderZone();
@@ -253,6 +255,15 @@ document.addEventListener("click", (e) => {
 });
 $("#back-btn").addEventListener("click", () => { if (state.step <= 0) location.href = "/"; else go(state.step - 1); });
 function paintSituation() { $$("[data-situation]").forEach(b => b.classList.toggle("selected", b.dataset.situation === state.situation)); }
+
+// 外観のスタイル（和風・ホワイト・ブラック）
+function paintStyle() {
+  $$<HTMLButtonElement>("#style-pick button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.style === (state.style ?? "white"))));
+}
+$$<HTMLButtonElement>("#style-pick button").forEach(b => b.addEventListener("click", () => {
+  state.style = b.dataset.style as ExteriorStyle; save(); paintStyle();
+  viewer?.setStyle(state.style); track("style", { style: state.style });
+}));
 
 // Step2：中央の＋の位置に角を追加（地図を直接タップするより狙いやすい）
 $("#add-btn").addEventListener("click", () => {
@@ -493,7 +504,8 @@ const CERT: Record<string, string> = { confirmed: "確認済み", public: "公�
 
 function renderResult() {
   if (!result) return;
-  if (!viewer) viewer = new Viewer($("#viewer"));
+  if (!viewer) { viewer = new Viewer($("#viewer")); viewer.setStyle(state.style ?? "white"); }
+  paintStyle();
   viewer.setSite(result);
   renderContext(result);
   const tabs = $("#plan-tabs"); tabs.innerHTML = "";

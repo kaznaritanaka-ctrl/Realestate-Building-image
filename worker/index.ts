@@ -16,9 +16,9 @@ interface Env {
 // 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
 const EVENT_NAMES = new Set([
   "lp_view", "wizard_view", "step_enter", "located", "shape_done", "road_set", "zone_resolved",
-  "run", "plan_tab", "sample_used", "ad_impression", "restart", "context", "rotate", "site_info",
+  "run", "plan_tab", "sample_used", "ad_impression", "restart", "context", "rotate", "site_info", "style", "situation", "edge_width", "step_jump",
 ]);
-const PROP_KEYS = new Set(["area", "deg", "step", "via", "areaBucket", "edges", "roads", "source", "zone", "focus", "stage", "plan", "size", "use", "ref", "mobile"]);
+const PROP_KEYS = new Set(["area", "deg", "step", "via", "areaBucket", "edges", "roads", "source", "zone", "focus", "stage", "plan", "size", "use", "ref", "mobile", "style", "situation", "w"]);
 
 const Z = 15;
 

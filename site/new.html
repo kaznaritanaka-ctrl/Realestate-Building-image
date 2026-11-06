@@ -13,7 +13,7 @@
 <body class="app-body">
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="/">土地の未来図<small>AI建築イメージ生成</small></a>
+    <a class="brand" href="/">土地の未来図<small>β版</small></a>
     <div class="progress" id="progress">
       <div class="prog-top">
         <button type="button" class="back" id="back-btn"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg><span id="back-label">戻る</span></button>
@@ -137,10 +137,6 @@
         <button type="button" class="btn" id="export-btn">ZIPで書き出す</button>
         <span class="muted" id="export-status"></span>
       </div>
-      <div class="card soon">
-        <b>写真品質の建築イメージ（準備中）</b>
-        <p>この3案をもとに、AIで外観を仕上げた画像を作る機能を準備しています。結果は専用のURLで見られます（メールアドレスの登録は不要です）。</p>
-      </div>
       <details class="card caution small">
         <summary>ご利用にあたって</summary>
         <ul>
@@ -164,6 +160,11 @@
       <button type="button" id="layer-btn" class="btn small">地図に切替</button>
     </div>
     <div id="crosshair" class="crosshair" aria-hidden="true" hidden></div>
+    <div class="style-pick" id="style-pick" role="radiogroup" aria-label="外観のスタイル" hidden>
+      <button type="button" role="radio" data-style="wa">和風</button>
+      <button type="button" role="radio" data-style="white">ホワイト</button>
+      <button type="button" role="radio" data-style="black">ブラック</button>
+    </div>
     <div class="orient" id="orient" hidden>
       <button type="button" class="btn small round" id="rot-l" aria-label="建物を左に15度回す">⟲</button>
       <div class="orient-mid"><b id="rot-val">向き自動</b><button type="button" class="linklike" id="rot-reset">自動に戻す</button></div>
