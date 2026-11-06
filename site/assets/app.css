@@ -284,3 +284,11 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 .vtx { position: relative; touch-action: none; }
 .vtx::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; }
 @media (pointer: coarse) { .vtx { width: 20px; height: 20px; } .vtx::after { inset: -16px; } }
+
+/* 辺の選択：3行（辺番号／長さ／道路）にして、4つまで1行に並べる。5つ以上は折り返す */
+.edge-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow: visible; padding: 2px 0 6px; }
+.edge-chip { flex: initial; min-width: 0; align-items: center; text-align: center; padding: 5px 4px; gap: 0; line-height: 1.35; }
+.edge-chip.sel { padding: 4px 3px; }
+.edge-chip b { font-size: .9rem; }
+.edge-chip span { font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.edge-chip.road .w { color: #b4561c; font-weight: 700; }

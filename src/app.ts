@@ -328,7 +328,7 @@ function renderEdgeList() {
   state.edges.forEach((w, i) => {
     const b = document.createElement("button"); b.type = "button";
     b.className = "edge-chip" + (i === selEdge ? " sel" : "") + (w !== "none" ? " road" : "");
-    b.innerHTML = `<b>辺${i + 1}</b><span>${edgeLen(i).toFixed(1)}m・${WIDTH_SHORT[w]}</span>`;
+    b.innerHTML = `<b>辺${i + 1}</b><span>${edgeLen(i).toFixed(1)}m</span><span class="w">${WIDTH_SHORT[w]}</span>`;
     b.addEventListener("click", () => { selEdge = i; redrawMap(); renderEdgeList(); });
     chips.appendChild(b);
   });
