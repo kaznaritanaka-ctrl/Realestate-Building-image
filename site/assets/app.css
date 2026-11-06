@@ -298,3 +298,23 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 .stage .style-pick[hidden] { display: none; }
 .style-pick button { font: inherit; font-size: .82rem; height: 38px; padding: 0 12px; border: 0; border-radius: 19px; background: transparent; color: var(--ink); cursor: pointer; }
 .style-pick button[aria-checked="true"] { background: var(--accent); color: #fff; font-weight: 700; }
+
+/* 結果を残す */
+.keep b { display: block; margin-bottom: 8px; }
+.keep-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.keep-btns .btn { min-height: 44px; padding: 6px 4px; font-size: .85rem; }
+.print-sheet { display: none; }
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body.app-body { height: auto !important; overflow: visible !important; display: block !important; background: #fff; }
+  body.app-body > *:not(.print-sheet) { display: none !important; }
+  .print-sheet { display: block; color: #1d2a2a; font-size: 10.5pt; }
+  .print-sheet h1 { font-size: 15pt; margin: 0 0 2mm; }
+  .print-sheet h2 { font-size: 12pt; margin: 4mm 0 2mm; }
+  .print-sheet .meta, .print-sheet .small { color: #4d5b5a; font-size: 8.5pt; }
+  .print-sheet .pplan { display: grid; grid-template-columns: 75mm 1fr; gap: 5mm; align-items: start; break-inside: avoid; margin: 4mm 0; }
+  .print-sheet .pplan img { width: 75mm; border: 1px solid #ddd6c8; border-radius: 2mm; }
+  .print-sheet .card { border: 0; padding: 0; margin: 0; }
+  .print-sheet .pinfo { break-inside: avoid; }
+  .print-sheet .kv th { width: 38%; }
+}

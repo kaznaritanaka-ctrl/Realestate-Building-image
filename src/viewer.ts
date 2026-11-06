@@ -205,7 +205,10 @@ export class Viewer {
     });
   }
 
-  snapshot(): string { return this.renderer.domElement.toDataURL("image/png"); }
+  snapshot(type = "image/png", quality?: number): string {
+    this.controls.update(); this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL(type, quality);
+  }
 }
 
 function clear(g: THREE.Group) {

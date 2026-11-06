@@ -38,6 +38,7 @@ const KEY = "tochi-mirai:v1";
 
 const state: State = load() ?? { step: 0, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
 applyFocusParam(state);
+const restored = applyShareHash(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
 
 // ガイドページなどから ?focus=house|rental|other で来たら、使い道の初期値にする（入力の途中なら上書きしない）
@@ -50,6 +51,37 @@ function applyFocusParam(st: State) {
   if (sit && SITUATIONS.includes(sit)) setSituation(st, sit);
   else if (f === "house" && !st.situation) st.situation = "house";
   else if ((f === "rental" || f === "other") && !st.situation) st.situation = "land";
+}
+// 結果を開き直すリンク：入力の内容だけを URL の # 以降に入れる（# 以降はサーバーに送られない）
+interface ShareData { v: 1; p: Vec2[]; e: EdgeChoice[]; z: ZoneKey; b?: string; f?: string; u: "" | UseKey; s?: Situation; st?: ExteriorStyle; r?: number; zs?: State["zoneSource"] }
+function encodeShare(): string {
+  const d: ShareData = { v: 1, p: state.points.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]), e: state.edges, z: state.zone, u: state.focus, s: state.situation, st: state.style, r: state.rotOffset || undefined, zs: state.zoneSource };
+  if (state.bcr) d.b = state.bcr; if (state.far) d.f = state.far;
+  const bytes = new TextEncoder().encode(JSON.stringify(d));
+  let bin = ""; bytes.forEach(c => (bin += String.fromCharCode(c)));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function shareUrl(): string {
+  const c = state.points.length ? centroid() : [135.5, 34.75];
+  return `${location.origin}/new.html#r=${encodeShare()}&map=19/${c[1].toFixed(6)}/${c[0].toFixed(6)}`;
+}
+function applyShareHash(st: State): boolean {
+  const m = location.hash.match(/(?:^#|&)r=([A-Za-z0-9_-]+)/);
+  if (!m) return false;
+  try {
+    const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
+    const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))) as ShareData;
+    if (d.v !== 1 || !Array.isArray(d.p) || d.p.length < 3 || d.p.length > 60) return false;
+    if (!d.p.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite))) return false;
+    if (!(d.z in ZONES)) return false;
+    Object.assign(st, {
+      points: d.p, edges: (d.e ?? []).slice(0, d.p.length), zone: d.z, bcr: d.b ?? "", far: d.f ?? "",
+      focus: d.u ?? "house", situation: d.s, style: d.st ?? st.style, rotOffset: d.r ?? 0,
+      zoneSource: d.zs ?? "user", sample: false, located: true, purposeSet: true, step: 6, zoneFetchedFor: "", zoneApi: null,
+    });
+    history.replaceState(null, "", location.pathname + location.search + location.hash.replace(/(^#|&)r=[A-Za-z0-9_-]+/, "$1").replace(/^#&/, "#"));
+    return true;
+  } catch { return false; }
 }
 function setSituation(st: State, sit: Situation) {
   st.situation = sit;
@@ -78,7 +110,7 @@ const map = new maplibregl.Map({
   maxZoom: 21,
   attributionControl: { compact: true },
   doubleClickZoom: false,
-  hash: true,
+  hash: "map", // #map=ズーム/緯度/経度（#r= の共有データと並べて使う）
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
@@ -255,6 +287,70 @@ document.addEventListener("click", (e) => {
 });
 $("#back-btn").addEventListener("click", () => { if (state.step <= 0) location.href = "/"; else go(state.step - 1); });
 function paintSituation() { $$("[data-situation]").forEach(b => b.classList.toggle("selected", b.dataset.situation === state.situation)); }
+
+// 結果を残す：PDF（端末の印刷機能）と、自分宛のメール（端末のメールアプリ）。どちらもサーバーには送らない
+function planLine(p: Plan): string {
+  const m = p.metrics;
+  const parts = [p.title.replace(/^[ABC]案：/, `${p.id}案 `)];
+  if (m.gfa > 0) parts.push(`${m.floors}階・延床 約${m.gfa}㎡（約${(m.gfa / 3.30579).toFixed(1)}坪）`);
+  if (m.units != null) parts.push(`${m.units}戸`);
+  if (m.parking) parts.push(`駐車${m.parking}台`);
+  parts.push(`概算 約${yen(m.costMin)}〜${yen(m.costMax)}円`);
+  return parts.join("・");
+}
+function siteLine(): string {
+  const s = result!.site;
+  return `敷地 約${s.area}㎡（約${(s.area / 3.30579).toFixed(1)}坪）・${s.zone.label}・建ぺい率${s.bcr}％／容積率${s.far}％`;
+}
+$("#mail-btn").addEventListener("click", () => {
+  if (!result) return;
+  const subject = `土地の未来図：この土地の3案（約${result.site.area}㎡・${result.site.zone.label}）`;
+  const body = [
+    "土地の未来図（β版）で作った3案のメモです。", "",
+    siteLine(), "",
+    ...result.plans.map(planLine), "",
+    "この結果をもう一度開く：", shareUrl(), "",
+    "※表示は参考イメージと概算です。建築できることを保証するものではありません。",
+  ].join("\n");
+  track("save_result", { via: "mail" });
+  location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+});
+$("#copy-btn").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(shareUrl()); alertBox("この結果を開くリンクをコピーしました。"); }
+  catch { prompt("このリンクをコピーしてください", shareUrl()); }
+  track("save_result", { via: "link" });
+});
+$("#pdf-btn").addEventListener("click", async () => {
+  if (!result || !viewer) return;
+  const btn = $("#pdf-btn") as HTMLButtonElement; btn.disabled = true;
+  const keep = activePlan;
+  const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const shots: string[] = [];
+  try {
+    for (let i = 0; i < result.plans.length; i++) {
+      viewer.setPlan(result.plans[i], result.site.rotation); await frames();
+      shots.push(viewer.snapshot("image/jpeg", 0.85));
+    }
+  } finally { viewer.setPlan(result.plans[keep], result.site.rotation); btn.disabled = false; }
+  const info = $("#site-info-box details")?.innerHTML.replace(/<summary>[\s\S]*?<\/summary>/, "") ?? "";
+  const s = result.site;
+  $("#print-sheet").innerHTML = `
+    <h1>土地の未来図（β版）：この土地の3案</h1>
+    <p class="meta">${new Date().toLocaleDateString("ja-JP")} 作成・外観：${({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"]}</p>
+    <table class="kv">
+      <tr><th>敷地面積</th><td>約${s.area}㎡（約${(s.area / 3.30579).toFixed(1)}坪）</td></tr>
+      <tr><th>用途地域</th><td>${esc(s.zone.label)}</td></tr>
+      <tr><th>建ぺい率／容積率</th><td>${s.bcr}％／${s.far}％（計算上の容積率 ${s.farEffective}％）</td></tr>
+      <tr><th>前面道路</th><td>${s.roadWidth == null ? "なし" : s.roadWidth >= 12 ? "12m以上" : `約${s.roadWidth}m として計算`}</td></tr>
+    </table>
+    ${result.plans.map((p, i) => `<section class="pplan"><img src="${shots[i]}" alt="${esc(p.title)}の3D"><div>${planHtml(p)}</div></section>`).join("")}
+    ${info && !state.sample ? `<section class="pinfo"><h2>この土地の参考情報</h2>${info}</section>` : ""}
+    <p class="small">表示は参考イメージと概算です。設計図・見積もりではなく、建築できること・法令に適合することを保証するものではありません。概算工事費は当サービスの暫定の目安です。</p>
+    <p class="small">この結果をもう一度開く：${esc(shareUrl())}</p>`;
+  track("save_result", { via: "pdf" });
+  await frames();
+  window.print();
+});
 
 // 外観のスタイル（和風・ホワイト・ブラック）
 function paintStyle() {
@@ -718,7 +814,8 @@ $("#export-btn").addEventListener("click", async () => {
 track("wizard_view", { mobile: matchMedia("(max-width: 760px)").matches });
 syncRadios();
 const params = new URLSearchParams(location.search);
-if (params.has("sample")) $("#sample-btn").click();
+if (restored) { save(); track("restored"); go(6); }
+else if (params.has("sample")) $("#sample-btn").click();
 else if (!state.situation) go(0);
 else if (state.step === 0 && params.has("s")) go(1);
 else go(state.step === 6 && state.points.length >= 3 ? 6 : Math.min(state.step, state.points.length >= 3 ? 5 : 2));

@@ -137,6 +137,15 @@
         <button type="button" class="btn" id="export-btn">ZIPで書き出す</button>
         <span class="muted" id="export-status"></span>
       </div>
+      <div class="card keep">
+        <b>この結果を残す</b>
+        <div class="keep-btns">
+          <button type="button" class="btn" id="pdf-btn">PDFで保存</button>
+          <button type="button" class="btn" id="mail-btn">自分宛にメール</button>
+          <button type="button" class="btn" id="copy-btn">リンクをコピー</button>
+        </div>
+        <p class="muted small-hint">メールは端末のメールアプリで下書きを作ります。宛先はご自身で入力してください。リンクには敷地の形と条件が入り、土地の未来図のサーバーには送られません。</p>
+      </div>
       <details class="card caution small">
         <summary>ご利用にあたって</summary>
         <ul>
@@ -172,6 +181,7 @@
     </div>
   </main>
 </div>
+<div id="print-sheet" class="print-sheet"></div>
 <script src="/assets/app.js" defer></script>
 </body>
 </html>
