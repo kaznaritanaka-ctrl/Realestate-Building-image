@@ -514,3 +514,9 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
   .ctrl-slot .area-warn { width: 100%; margin: 0; }
   .ctrl-slot .area-warn summary { padding: 8px 10px; font-size: .85rem; }
 }
+
+/* 上限案の建物の形 */
+.shape-pick { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 2px 0 10px; }
+.shape-pick span { font-size: .8rem; color: var(--ink-soft); margin-right: 4px; }
+.shape-pick button { font: inherit; font-size: .82rem; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+.shape-pick button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }

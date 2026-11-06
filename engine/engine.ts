@@ -22,7 +22,10 @@ export interface SiteInput {
   rotationOffsetDeg?: number;
   /** 用途地域等の出所：api=公的データから自動取得、user=利用者が指定、guess=街の様子から推定 */
   zoneSource?: "api" | "user" | "guess";
+  /** 上限案の建物の形：auto=長方形より10%以上広くなるときだけL字、rect=長方形、L=L字、U=コの字 */
+  shape?: BuildingShape;
 }
+export type BuildingShape = "auto" | "rect" | "L" | "U";
 
 export type Certainty = "confirmed" | "public" | "reference" | "guess" | "unknown" | "user";
 
@@ -165,7 +168,7 @@ export function computePlans(input: SiteInput): EngineResult {
     }
     const mr = maxRectInMask(buildable, cols);
     const rect: Rect | null = mr ? { u0: umin + mr.c0 * CELL, v0: vmin + mr.r0 * CELL, u1: umin + mr.c1 * CELL, v1: vmin + mr.r1 * CELL } : null;
-    return { phi, Q, CELL, cols, rows, umin, vmin, inside, rect, area: rect ? rectArea(rect) : 0, cells: cols * rows };
+    return { phi, Q, CELL, cols, rows, umin, vmin, inside, buildable, rect, area: rect ? rectArea(rect) : 0, cells: cols * rows };
   }
   // 候補：道路に合わせた向き（0°）と、敷地の各辺に合わせた向き（±45°の範囲に正規化）
   const norm = (a: number) => { let x = ((a + Math.PI / 4) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2) - Math.PI / 4; if (Math.abs(x) < 1e-6) x = 0; return x; };
@@ -184,7 +187,7 @@ export function computePlans(input: SiteInput): EngineResult {
   const autoRotation = bestG.phi;
   const offset = ((input.rotationOffsetDeg ?? 0) * Math.PI) / 180;
   const G = offset ? buildGrid(autoRotation + offset) : bestG;
-  const { Q, CELL, cols, rows, umin, vmin, inside } = G;
+  const { Q, CELL, cols, rows, umin, vmin, inside, buildable } = G;
   const buildableRect = G.rect;
   if (!buildableRect || rectArea(buildableRect) < 12) {
     warnings.push("後退距離を確保すると建物を置ける範囲がほとんどありません。敷地の形・大きさを確認してください。");
@@ -208,8 +211,8 @@ export function computePlans(input: SiteInput): EngineResult {
 
   // 道路斜線の適用距離（前面道路の反対側の境界から、この距離までが斜線の対象）
   const applyDist = zone.residential ? (far <= 200 ? 20 : far <= 300 ? 25 : far <= 400 ? 30 : 35) : (far <= 400 ? 20 : far <= 600 ? 25 : far <= 800 ? 30 : 35);
-  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, cols, rows, umin, vmin, P: Q, hasRoad: roadEdges.length > 0,
-    phi: G.phi, slope, roadW: Math.min(roadForSlope, 12), applyDist };
+  const ctx: Ctx = { cell: CELL, siteArea, bcr, far, farEffective, maxFootprint, maxGFA, floorsCap, zone, buildableRect, inside, buildable, cols, rows, umin, vmin, P: Q, hasRoad: roadEdges.length > 0,
+    phi: G.phi, slope, roadW: Math.min(roadForSlope, 12), applyDist, shape: input.shape ?? "auto" };
 
   const ids = ["A", "B", "C"] as const;
   const SIZE_LABEL: Record<Size, string> = { small: "小さめ", mid: "中間", max: "上限" };
@@ -265,10 +268,11 @@ interface Ctx {
   cell: number;
   siteArea: number; bcr: number; far: number; farEffective: number;
   maxFootprint: number; maxGFA: number; floorsCap: number; zone: ZoneInfo;
-  buildableRect: Rect | null; inside: Uint8Array[]; cols: number; rows: number; umin: number; vmin: number; P: Vec2[];
+  buildableRect: Rect | null; inside: Uint8Array[]; buildable: Uint8Array[]; cols: number; rows: number; umin: number; vmin: number; P: Vec2[];
   hasRoad: boolean;
   /** 道路斜線の段状計算用：建物の向き、勾配、前面道路の幅、適用距離 */
   phi: number; slope: number; roadW: number; applyDist: number;
+  shape: BuildingShape;
 }
 
 /** 置ける範囲 rect の中に、面積 target の長方形を置く。anchor=back は奥寄せ（手前を駐車に使う） */
@@ -374,40 +378,153 @@ function cutFront(ctx: Ctx, r: Rect, d: number): Rect {
 }
 
 export type LimitReason = "far" | "cap" | "slant" | "area";
+
+type Side = "back" | "front" | "left" | "right";
+const MIN_WING = 4; // 翼の最小の幅・奥行（m）
 /**
- * 上限の建物：1階は建ぺい率いっぱい。上の階は、階ごとに道路斜線（後退緩和つきの簡易計算）を満たすよう
- * 道路側を下げ（段状）、容積率に届くまで、または階数の上限まで積む。最後の階は残りの面積だけ（奥寄せ）
+ * base の1辺に接する、建てられる範囲の中で最大の長方形（翼）を探す。
+ * 辺から外へ途切れず続くマスだけを候補にするので、最大の長方形は必ず base の辺に接する。
+ * 翼の横幅は base の辺の範囲内（L字・T字になる）
  */
-function steppedMass(ctx: Ctx, rect: Rect, cap: number, kind: Box["kind"], fh: number, roof: Box["roof"]): { boxes: Box[]; reason: LimitReason } {
+function findWing(ctx: Ctx, base: Rect, side: Side, exclude: Rect[]): Rect | null {
+  const { cell, umin, vmin, rows, cols, buildable: inside } = ctx; // 後退距離を除いた、建てられるマス
+  const c0 = Math.round((base.u0 - umin) / cell), c1 = Math.round((base.u1 - umin) / cell);
+  const r0 = Math.round((base.v0 - vmin) / cell), r1 = Math.round((base.v1 - vmin) / cell);
+  const blocked = (r: number, c: number) => {
+    const u = umin + (c + 0.5) * cell, v = vmin + (r + 0.5) * cell;
+    return exclude.some(x => u > x.u0 && u < x.u1 && v > x.v0 && v < x.v1);
+  };
+  const ok = (r: number, c: number) => r >= 0 && r < rows && c >= 0 && c < cols && !!inside[r][c] && !blocked(r, c);
+  const mask: Uint8Array[] = Array.from({ length: rows }, () => new Uint8Array(cols));
+  if (side === "back" || side === "front") {
+    for (let c = Math.max(0, c0); c < Math.min(cols, c1); c++) {
+      if (side === "back") for (let r = r1; r < rows && ok(r, c); r++) mask[r][c] = 1;
+      else for (let r = r0 - 1; r >= 0 && ok(r, c); r--) mask[r][c] = 1;
+    }
+  } else {
+    for (let r = Math.max(0, r0); r < Math.min(rows, r1); r++) {
+      if (side === "right") for (let c = c1; c < cols && ok(r, c); c++) mask[r][c] = 1;
+      else for (let c = c0 - 1; c >= 0 && ok(r, c); c--) mask[r][c] = 1;
+    }
+  }
+  const mr = maxRectInMask(mask, cols);
+  if (!mr) return null;
+  const w: Rect = { u0: umin + mr.c0 * cell, v0: vmin + mr.r0 * cell, u1: umin + mr.c1 * cell, v1: vmin + mr.r1 * cell };
+  if (w.u1 - w.u0 < MIN_WING || w.v1 - w.v0 < MIN_WING || rectArea(w) < 15) return null;
+  return w;
+}
+
+/** 翼を base から離れる方向だけ削って、面積を target にする（base に接したまま） */
+function trimWing(w: Rect, side: Side, target: number): Rect | null {
+  const W = w.u1 - w.u0, D = w.v1 - w.v0;
+  let out = { ...w };
+  if (rectArea(w) > target) {
+    if (side === "back") out.v1 = w.v0 + target / W;
+    else if (side === "front") out.v0 = w.v1 - target / W;
+    else if (side === "right") out.u1 = w.u0 + target / D;
+    else out.u0 = w.u1 - target / D;
+  }
+  return out.u1 - out.u0 >= 3 && out.v1 - out.v0 >= 3 ? out : null;
+}
+
+/**
+ * 上限案の1階の形：長方形（base）か、base に翼を足したL字・コの字。建築面積は建ぺい率の上限まで。
+ * auto は、長方形より建築面積が10%以上広くなるときだけL字にする
+ */
+function footprints(ctx: Ctx, rect: Rect, kind: Box["kind"], notes: string[]): Rect[] {
   const base = placeRect(rect, Math.min(rectArea(rect), ctx.maxFootprint), "back");
-  const s0 = frontDist(ctx, base); // 後退距離（建物のいちばん道路寄りの部分）
-  const floors: Rect[] = [];
+  const want = ctx.shape;
+  if (want === "rect") return [base];
+  const budget = ctx.maxFootprint - rectArea(base);
+  if (budget < 15) {
+    if (want === "L" || want === "U") notes.push("長方形で建ぺい率の上限に届くため、長方形の建物にしています。");
+    return [base];
+  }
+  // 戸建ては手前を駐車に使うので、道路側には翼を出さない
+  const sides: Side[] = kind === "house" ? ["back", "left", "right"] : ["back", "left", "right", "front"];
+  let best: { w: Rect; side: Side } | null = null;
+  for (const side of sides) {
+    const w = findWing(ctx, base, side, []);
+    if (w && (!best || rectArea(w) > rectArea(best.w))) best = { w, side };
+  }
+  const w1 = best ? trimWing(best.w, best.side, budget) : null;
+  if (!best || !w1 || (want === "auto" && rectArea(w1) < rectArea(base) * 0.1)) {
+    if (want === "L" || want === "U") notes.push("敷地の形から、L字・コの字にできる余地がないため長方形の建物にしています。");
+    return [base];
+  }
+  const out = [base, w1];
+  if (want === "U") {
+    // コの字：(a) 本体の同じ辺の反対の端にもう1つ翼を出す、または (b) 翼の先から本体と平行にもう1つ出す。間に4m以上の中庭
+    const rest = ctx.maxFootprint - rectArea(base) - rectArea(w1);
+    const horiz = best.side === "back" || best.side === "front";
+    const cands: Rect[] = [];
+    const gapA = horiz ? { u0: w1.u0 - 4, u1: w1.u1 + 4, v0: -1e9, v1: 1e9 } : { u0: -1e9, u1: 1e9, v0: w1.v0 - 4, v1: w1.v1 + 4 };
+    const a = findWing(ctx, base, best.side, [gapA]);
+    const ta = a && trimWing(a, best.side, rest); if (ta) cands.push(ta);
+    // (b) 本体が翼よりはみ出している向きへ、翼から出す
+    const sideB: Side = horiz ? (base.u1 - w1.u1 > w1.u0 - base.u0 ? "right" : "left") : (base.v1 - w1.v1 > w1.v0 - base.v0 ? "back" : "front");
+    const gapB = horiz ? { u0: base.u0 - 4, u1: base.u1 + 4, v0: -1e9, v1: 1e9 } : { u0: base.u0 - 4, u1: base.u1 + 4, v0: -1e9, v1: 1e9 };
+    const b = findWing(ctx, w1, sideB, [base, gapB]);
+    const tb = b && trimWing(b, sideB, rest); if (tb) cands.push(tb);
+    const w2 = cands.sort((x, y) => rectArea(y) - rectArea(x))[0];
+    if (w2) out.push(w2);
+    else notes.push("コの字にできる余地がないため、L字の建物にしています。");
+  }
+  const gain = Math.round(((out.reduce((a, r) => a + rectArea(r), 0) - rectArea(base)) / rectArea(base)) * 100);
+  notes.push(`敷地の形に合わせて${out.length === 3 ? "コの字" : "L字"}の建物にしています（長方形より建築面積が約${gain}％広い）。`);
+  return out;
+}
+
+/**
+ * 上限の建物：1階は footprints（建ぺい率いっぱい）。上の階は、階ごとに道路斜線（後退緩和つきの簡易計算）を
+ * 満たすよう道路側を下げ（段状）、容積率に届くまで、または階数の上限まで積む。最後の階は残りの面積だけ
+ */
+function steppedMass(ctx: Ctx, rect: Rect, cap: number, kind: Box["kind"], fh: number, roof: Box["roof"], notes: string[] = []): { boxes: Box[]; reason: LimitReason } {
+  const fps = footprints(ctx, rect, kind, notes);
+  const s0 = Math.min(...fps.map(r => frontDist(ctx, r))); // 後退距離（建物のいちばん道路寄りの部分）
+  const levels: (Rect | null)[][] = [];
   let gfa = 0, reason: LimitReason = "cap";
   for (let k = 1; k <= cap; k++) {
     if (gfa >= ctx.maxGFA - 1) { reason = "far"; break; }
-    let r = { ...base };
-    if (ctx.hasRoad) {
-      // 高さ H の部分は、道路境界線から H/勾配 − 道路幅 − 後退距離 以上離す（適用距離より先は制限なし）
-      const need = Math.min((k * fh) / ctx.slope - ctx.roadW - s0, ctx.applyDist);
-      if (need > frontDist(ctx, r)) r = cutFront(ctx, r, need);
-    }
+    // 高さ H の部分は、道路境界線から H/勾配 − 道路幅 − 後退距離 以上離す（適用距離より先は制限なし）
+    const need = ctx.hasRoad ? Math.min((k * fh) / ctx.slope - ctx.roadW - s0, ctx.applyDist) : -Infinity;
+    let rs: (Rect | null)[] = fps.map(r => {
+      const c = need > frontDist(ctx, r) ? cutFront(ctx, r, need) : { ...r };
+      return rectArea(c) >= 10 && c.u1 - c.u0 >= 3 && c.v1 - c.v0 >= 3 ? c : null;
+    });
+    let total = rs.reduce((a, r) => a + (r ? rectArea(r) : 0), 0);
     const rem = ctx.maxGFA - gfa;
-    if (rectArea(r) > rem) r = placeRect(r, rem, "back");
-    if (rectArea(r) < 15 || r.u1 - r.u0 < 3 || r.v1 - r.v0 < 3) {
-      reason = ctx.maxGFA - gfa < 15 ? "far" : k === 1 ? "area" : "slant";
-      break;
+    // 最後の階は残りの面積だけ：翼から減らし、足りなければ本体を奥寄せで小さくする
+    for (let i = rs.length - 1; i >= 0 && total > rem; i--) {
+      const r = rs[i]; if (!r) continue;
+      const excess = total - rem;
+      if (i > 0 && rectArea(r) <= excess) { rs[i] = null; total -= rectArea(r); }
+      else { const nr = placeRect(r, rectArea(r) - excess, "back"); total -= rectArea(r) - rectArea(nr); rs[i] = nr; }
     }
-    floors.push(r); gfa += rectArea(r);
+    rs = rs.map(r => (r && rectArea(r) >= 10 ? r : null));
+    total = rs.reduce((a, r) => a + (r ? rectArea(r) : 0), 0);
+    if (total < 15) { reason = ctx.maxGFA - gfa < 15 ? "far" : k === 1 ? "area" : "slant"; break; }
+    levels.push(rs); gfa += total;
     if (k === cap) reason = gfa >= ctx.maxGFA - 1 ? "far" : "cap";
   }
-  // 同じ形の階をまとめて箱にする
+  // 平面の位置ごとに、同じ形が続く階をまとめて箱にする
+  const same = (a: Rect, b: Rect) => Math.abs(a.u0 - b.u0) < 1e-6 && Math.abs(a.u1 - b.u1) < 1e-6 && Math.abs(a.v0 - b.v0) < 1e-6 && Math.abs(a.v1 - b.v1) < 1e-6;
   const boxes: Box[] = [];
-  floors.forEach((r, i) => {
-    const last = boxes[boxes.length - 1];
-    if (last && Math.abs(last.u0 - r.u0) < 1e-6 && Math.abs(last.u1 - r.u1) < 1e-6 && Math.abs(last.v0 - r.v0) < 1e-6 && Math.abs(last.v1 - r.v1) < 1e-6) last.floors++;
-    else boxes.push({ ...r, floors: 1, floorHeight: fh, roof: "flat", kind, ...(i ? { baseFloor: i } : {}) });
+  fps.forEach((_, j) => {
+    let cur: Box | null = null;
+    levels.forEach((rs, k) => {
+      const r = rs[j];
+      if (r && cur && same(cur, r) && (cur.baseFloor ?? 0) + cur.floors === k) cur.floors++;
+      else if (r) { cur = { ...r, floors: 1, floorHeight: fh, roof: "flat", kind, ...(k ? { baseFloor: k } : {}) }; boxes.push(cur); }
+      else cur = null;
+    });
   });
-  if (boxes.length) boxes[boxes.length - 1].roof = roof;
+  // 屋根：その上に何も載っていない箱だけ、指定の屋根にする
+  for (const b of boxes) {
+    const top = (b.baseFloor ?? 0) + b.floors;
+    const covered = boxes.some(o => o !== b && (o.baseFloor ?? 0) === top && o.u0 < b.u1 && o.u1 > b.u0 && o.v0 < b.v1 && o.v1 > b.v0);
+    b.roof = covered ? "flat" : roof;
+  }
   return { boxes, reason };
 }
 
@@ -415,8 +532,8 @@ function limitNote(ctx: Ctx, boxes: Box[], reason: LimitReason, kind: "house" | 
   const gfa = gfaOf(boxes), fp = boxes.filter(b => !b.baseFloor).reduce((s, b) => s + rectArea(b), 0);
   const farUsed = Math.round((gfa / ctx.siteArea) * 100), farMax = Math.round(ctx.farEffective);
   const parts: string[] = [];
-  if (fp < ctx.maxFootprint - 1) parts.push(`建ぺい率は${ctx.bcr}％のうち約${Math.round((fp / ctx.siteArea) * 100)}％（敷地の形と後退距離のため、長方形の建物として計算）`);
-  if (farUsed < farMax - 1) {
+  if (fp < ctx.maxFootprint * 0.97) parts.push(`建ぺい率は${ctx.bcr}％のうち約${Math.round((fp / ctx.siteArea) * 100)}％（敷地の形と後退距離のため）`);
+  if (farUsed < farMax * 0.97) {
     const why = reason === "cap" ? (kind === "house" ? "戸建ては3階までとしているため" : "低層住居の地域（高さ10m前後）で3階までのため")
       : reason === "slant" ? "道路斜線（簡易計算）で、上の階を道路から下げても床を確保できないため"
       : reason === "area" ? "建てられる範囲が狭いため" : "";
@@ -452,7 +569,7 @@ function planHouse(ctx: Ctx, size: Size): Plan {
     if (fp * 2 < smallGFA * 0.9 && cap >= 3) { floors = 3; fp = Math.min(smallGFA / 3, ctx.maxFootprint, rectArea(rect)); }
     floors = Math.min(floors, cap);
     const small: Box[] = [{ ...placeRect(rect, fp, "back"), floors, floorHeight: 2.9, roof: "gable", kind: "house" }];
-    const st = steppedMass(ctx, rect, 3, "house", 2.9, "gable"); // 戸建ては3階まで
+    const st = steppedMass(ctx, rect, 3, "house", 2.9, "gable", size === "max" ? notes : []); // 戸建ては3階まで
     const max = st.boxes.length ? st.boxes : maxMass(ctx, rect, cap, "house", 2.9, "gable");
     buildings.push(...(size === "small" ? small : size === "max" ? max : midMass(ctx, rect, small, max, "house", 2.9, "gable")));
     if (size === "max") { const n = limitNote(ctx, max, st.reason, "house"); if (n) notes.push(n); }
@@ -475,7 +592,7 @@ function planRental(ctx: Ctx, size: Size): Plan {
   const buildings: Box[] = [];
   if (rect && rectArea(rect) >= 30) {
     // 集合住宅は階数を固定しない（低層住居の地域だけ3階まで）。上限は容積率と段状の道路斜線で決まる
-    const st = steppedMass(ctx, rect, ctx.zone.lowRise ? 3 : 30, "apartment", 3.0, "flat");
+    const st = steppedMass(ctx, rect, ctx.zone.lowRise ? 3 : 30, "apartment", 3.0, "flat", size === "max" ? notes : []);
     const max = st.boxes.length ? st.boxes : maxMass(ctx, rect, ctx.floorsCap, "apartment", 3.0, "flat");
     if (size === "max") { const n = limitNote(ctx, max, st.reason, "apartment"); if (n) notes.push(n); }
     const fpMax = Math.min(rectArea(rect), ctx.maxFootprint);

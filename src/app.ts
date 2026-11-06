@@ -1,5 +1,5 @@
 import maplibregl from "maplibre-gl";
-import { computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
+import { type BuildingShape, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
@@ -26,6 +26,7 @@ interface State {
   rotOffset?: number;
   situation?: Situation;
   style?: ExteriorStyle;
+  shape?: BuildingShape;
 }
 type Situation = "house" | "land" | "akiya" | "sell" | "inherit";
 const SITUATIONS: Situation[] = ["house", "land", "akiya", "sell", "inherit"];
@@ -53,9 +54,9 @@ function applyFocusParam(st: State) {
   else if ((f === "rental" || f === "other") && !st.situation) st.situation = "land";
 }
 // 結果を開き直すリンク：入力の内容だけを URL の # 以降に入れる（# 以降はサーバーに送られない）
-interface ShareData { v: 1; p: Vec2[]; e: EdgeChoice[]; z: ZoneKey; b?: string; f?: string; u: "" | UseKey; s?: Situation; st?: ExteriorStyle; r?: number; zs?: State["zoneSource"] }
+interface ShareData { v: 1; p: Vec2[]; e: EdgeChoice[]; z: ZoneKey; b?: string; f?: string; u: "" | UseKey; s?: Situation; st?: ExteriorStyle; r?: number; zs?: State["zoneSource"]; sh?: BuildingShape }
 function encodeShare(): string {
-  const d: ShareData = { v: 1, p: state.points.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]), e: state.edges, z: state.zone, u: state.focus, s: state.situation, st: state.style, r: state.rotOffset || undefined, zs: state.zoneSource };
+  const d: ShareData = { v: 1, p: state.points.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]), e: state.edges, z: state.zone, u: state.focus, s: state.situation, st: state.style, r: state.rotOffset || undefined, zs: state.zoneSource, sh: state.shape && state.shape !== "auto" ? state.shape : undefined };
   if (state.bcr) d.b = state.bcr; if (state.far) d.f = state.far;
   const bytes = new TextEncoder().encode(JSON.stringify(d));
   let bin = ""; bytes.forEach(c => (bin += String.fromCharCode(c)));
@@ -76,7 +77,7 @@ function applyShareHash(st: State): boolean {
     if (!(d.z in ZONES)) return false;
     Object.assign(st, {
       points: d.p, edges: (d.e ?? []).slice(0, d.p.length), zone: d.z, bcr: d.b ?? "", far: d.f ?? "",
-      focus: d.u ?? "house", situation: d.s, style: d.st ?? st.style, rotOffset: d.r ?? 0,
+      focus: d.u ?? "house", situation: d.s, style: d.st ?? st.style, rotOffset: d.r ?? 0, shape: d.sh ?? "auto",
       zoneSource: d.zs ?? "user", sample: false, located: true, purposeSet: true, step: 6, zoneFetchedFor: "", zoneApi: null,
     });
     history.replaceState(null, "", location.pathname + location.search + location.hash.replace(/(^#|&)r=[A-Za-z0-9_-]+/, "$1").replace(/^#&/, "#"));
@@ -434,6 +435,24 @@ $$<HTMLButtonElement>("#views [data-h]").forEach(b => b.addEventListener("click"
   track("view", { h: viewH, dir: viewSide });
 }));
 
+// 上限案の建物の形（おまかせ・長方形・L字・コの字）
+function paintShape() {
+  $$<HTMLButtonElement>("#shape-pick [data-shape]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.shape === (state.shape ?? "auto"))));
+}
+$$<HTMLButtonElement>("#shape-pick [data-shape]").forEach(b => b.addEventListener("click", () => {
+  const v = b.dataset.shape as BuildingShape;
+  if ((state.shape ?? "auto") === v) return;
+  state.shape = v; save(); paintShape();
+  const keep = activePlan;
+  if (compute()) {
+    // 形が効くのは上限案なので、上限案を表示する
+    const maxIdx = result!.plans.findIndex(p => p.size === "max");
+    activePlan = maxIdx >= 0 ? maxIdx : Math.min(keep, result!.plans.length - 1);
+    renderResult();
+  }
+  track("shape", { shape: v });
+}));
+
 // 外観のスタイル（和風・ホワイト・ブラック）
 function paintStyle() {
   $$<HTMLButtonElement>("#style-pick button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.style === (state.style ?? "white"))));
@@ -667,6 +686,7 @@ function compute(): boolean {
       focusUse: state.focus || null,
       zoneSource: state.zoneSource === "none" ? undefined : state.zoneSource,
       rotationOffsetDeg: state.rotOffset ?? 0,
+      shape: state.shape ?? "auto",
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
@@ -684,6 +704,7 @@ const CERT: Record<string, string> = { confirmed: "確認済み", public: "公�
 
 function renderResult() {
   if (!result) return;
+  paintShape();
   if (!viewer) {
     viewer = new Viewer($("#viewer")); viewer.setStyle(state.style ?? "white");
     const needle = $("#gz-needle");

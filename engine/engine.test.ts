@@ -166,3 +166,61 @@ test("向きの手動調整（15°）が反映される", () => {
   assert.ok(Math.abs(b.site.rotation - Math.PI / 12) < 1e-9);
   assert.ok(b.plans[0].metrics.gfa > 0);
 });
+
+// ---- L字・コの字の建物 ----
+import { pointInPolygon } from "./geom.ts";
+const groundBoxes = (bs: { u0: number; v0: number; u1: number; v1: number; baseFloor?: number }[]) => bs.filter(b => !b.baseFloor);
+function assertInsideAndApart(poly: [number, number][], bs: { u0: number; v0: number; u1: number; v1: number; baseFloor?: number }[]) {
+  for (const b of bs) for (const p of [[b.u0 + 0.01, b.v0 + 0.01], [b.u1 - 0.01, b.v0 + 0.01], [b.u0 + 0.01, b.v1 - 0.01], [b.u1 - 0.01, b.v1 - 0.01]] as [number, number][]) {
+    assert.ok(pointInPolygon(p, poly), `corner ${p} outside`);
+  }
+  const g = groundBoxes(bs);
+  for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+    const a = g[i], c = g[j];
+    const ov = Math.max(0, Math.min(a.u1, c.u1) - Math.max(a.u0, c.u0)) * Math.max(0, Math.min(a.v1, c.v1) - Math.max(a.v0, c.v0));
+    assert.ok(ov < 0.01, "1階の箱どうしが重ならない");
+  }
+}
+
+const Llot: [number, number][] = [[0, 0], [20, 0], [20, 10], [8, 10], [8, 25], [0, 25]];
+
+test("L字の土地：上限案はL字の建物になり、建ぺい率の上限に届く", () => {
+  const r = computePlans({ polygon: Llot, roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "rental" });
+  const C = r.plans[2];
+  assert.equal(groundBoxes(C.buildings).length, 2, "1階が2つの長方形（L字）");
+  assert.ok(Math.abs(C.metrics.bcrUsed - 60) < 1, `bcr ${C.metrics.bcrUsed}`);
+  assert.ok(C.metrics.farUsed <= r.site.farEffective + 0.1);
+  assert.ok(C.notes.some(n => n.includes("L字")), C.notes.join(" / "));
+  assertInsideAndApart(Llot, C.buildings);
+});
+
+test("形を「長方形」に指定すると、L字にしない", () => {
+  const r = computePlans({ polygon: Llot, roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "rental", shape: "rect" });
+  assert.equal(groundBoxes(r.plans[2].buildings).length, 1);
+});
+
+test("コの字の土地：形を「コの字」に指定すると、1階が3つの長方形で中庭をはさむ", () => {
+  const U: [number, number][] = [[0, 0], [24, 0], [24, 24], [16, 24], [16, 8], [8, 8], [8, 24], [0, 24]];
+  const r = computePlans({ polygon: U, roadEdges: [{ index: 0, width: "6to12" }], zone: "nbrCom", focusUse: "rental", shape: "U" });
+  const C = r.plans[2];
+  assert.equal(groundBoxes(C.buildings).length, 3, C.notes.join(" / "));
+  assert.ok(C.metrics.bcrUsed <= 80 + 0.1);
+  assertInsideAndApart(U, C.buildings);
+});
+
+test("長方形の土地でL字を指定しても、長方形で上限に届くなら長方形のまま", () => {
+  const r = computePlans({ polygon: rect(14, 22), roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "house", shape: "L" });
+  assert.equal(groundBoxes(r.plans[2].buildings).length, 1);
+  assert.ok(r.plans[2].notes.some(n => n.includes("長方形")));
+});
+
+test("旗竿地：竿の部分（幅3m）には建物を出さない", () => {
+  const flag: [number, number][] = [[0, 0], [3, 0], [3, 15], [14, 15], [14, 28], [0, 28]];
+  for (const use of ["house", "rental"] as const) {
+    const r = computePlans({ polygon: flag, roadEdges: [{ index: 0, width: "4to6" }], zone: "r1", focusUse: use });
+    for (const p of r.plans) {
+      assertInsideAndApart(flag, p.buildings);
+      for (const b of p.buildings) assert.ok(b.v0 >= 15 - 1e-6 || b.u1 <= 3 + 1e-6, `${use} ${p.id} 竿にはみ出さない`);
+    }
+  }
+});
