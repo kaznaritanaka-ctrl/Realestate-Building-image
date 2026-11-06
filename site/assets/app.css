@@ -238,7 +238,7 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 .stage .orient { position: absolute; right: 12px; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 6px; margin: 0; background: rgba(255,253,248,.92); border-radius: 26px; padding: 4px; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
 .stage .orient[hidden] { display: none; }
 .stage .orient .btn.round { width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 1.1rem; box-shadow: none; }
-.stage .orient .orient-mid { min-width: 84px; max-width: 150px; }
+.stage .orient .orient-mid { min-width: 96px; max-width: 190px; }
 
 /* スマホ：上に地図／3D、下にシート。質問の画面では地図を隠す */
 @media (max-width: 760px) {

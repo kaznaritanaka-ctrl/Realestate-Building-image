@@ -559,7 +559,7 @@ function paintOrient() {
   if (!result) return;
   const off = state.rotOffset ?? 0;
   const auto = Math.round((result.site.autoRotation * 180) / Math.PI);
-  $("#rot-val").textContent = off ? `自動${off > 0 ? "+" : ""}${off}°` : auto ? `自動（敷地に合わせ${auto > 0 ? "+" : ""}${auto}°）` : "自動（道路に合わせる）";
+  $("#rot-val").textContent = off ? `向き 自動${off > 0 ? "+" : ""}${off}°` : auto ? `向き自動（敷地に合わせ${auto > 0 ? "+" : ""}${auto}°）` : "向き自動（道路に合わせる）";
   $("#rot-reset").classList.toggle("off", !off); // 非表示でも場所は確保して、ボタンの位置を動かさない
 }
 function rotateBy(delta: number) {
