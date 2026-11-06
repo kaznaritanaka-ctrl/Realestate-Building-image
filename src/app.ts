@@ -32,8 +32,14 @@ const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(docume
 const KEY = "tochi-mirai:v1";
 
 const state: State = load() ?? { step: 1, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+applyFocusParam(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
 
+// ガイドページなどから ?focus=house|rental|other で来たら、使い道の初期値にする（入力の途中なら上書きしない）
+function applyFocusParam(st: State) {
+  const f = new URLSearchParams(location.search).get("focus");
+  if ((f === "house" || f === "rental" || f === "other") && !st.purposeSet) st.focus = f;
+}
 function load(): State | null { try { const s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; } catch { return null; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* 保存できない環境では無視 */ } }
 
@@ -561,15 +567,25 @@ async function showFootprints(res: EngineResult, origin: [number, number], key: 
 interface AdSlotPub { slot: string; use: UseKey; advertiser: string; text: string }
 let adSlots: AdSlotPub[] | null = null;
 const adShown = new Set<string>();
+// 一度クリックした広告枠は、同じ端末では目立たせない（端末内だけの記録）
+const AD_CLICK_KEY = "tochi-mirai:adclick";
+function adClicked(): string[] { try { return JSON.parse(localStorage.getItem(AD_CLICK_KEY) || "[]"); } catch { return []; } }
+
 async function renderAd(use: UseKey) {
   const box = $("#ad-box");
   if (adSlots === null) {
     try { adSlots = (await (await fetch("/api/ads")).json()).slots ?? []; } catch { adSlots = []; }
   }
   const ad = adSlots!.find(a => a.use === use);
+  $("#pr-top").hidden = !ad; // 広告があるときだけ、ページ上部にも【PR】を出す（タウンライフの指定：ファーストビュー＋任意の場所）
   if (!ad) { box.innerHTML = ""; return; }
-  box.innerHTML = `<a class="ad" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}" target="_blank" rel="sponsored noopener">
-    <span class="pr">PR</span><b>${esc(ad.text)}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。画像・3Dの表示は申込みの有無にかかわらず無料です。</small>` : ""}</a>`;
+  const clicked = adClicked().includes(ad.slot);
+  box.innerHTML = `<div class="next-step${clicked ? " quiet" : ""}"><h3>次のステップ【PR】</h3>
+    <a class="ad" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}&amp;src=result" target="_blank" rel="sponsored noopener">
+    <b>${esc(ad.text)}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。複数社を選ぶと、プランを並べて比べやすくなります。3D・規模・参考情報は、申込みの有無にかかわらず無料で見られます。</small>` : ""}</a></div>`;
+  box.querySelector("a.ad")!.addEventListener("click", () => {
+    const list = adClicked(); if (!list.includes(ad.slot)) { list.push(ad.slot); try { localStorage.setItem(AD_CLICK_KEY, JSON.stringify(list)); } catch { /* 保存できなくても続ける */ } }
+  });
   if (!adShown.has(ad.slot)) { adShown.add(ad.slot); track("ad_impression", { use }); }
 }
 

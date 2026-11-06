@@ -4,6 +4,7 @@ export interface AdSlot {
   slot: string;        // /go/:slot の識別子
   use: "house" | "rental" | "other";
   url: string;         // ASPから発行されたアフィリエイトURL（未承認のうちは空）
+  official?: string;   // 承認前にガイドページから案内するときの公式サイト（アフィリエイトではないURL）
   advertiser: string;  // 表示する広告主・サービス名
   text: string;        // リンク文言
 }
@@ -13,21 +14,24 @@ export const AD_SLOTS: AdSlot[] = [
     slot: "house-plan",
     use: "house",
     url: "",
+    official: "https://www.town-life.jp/home/",
     advertiser: "タウンライフ家づくり",
-    text: "この土地に合う間取りプランと見積もりを、複数の住宅会社から無料で取り寄せる",
+    text: "この方向で、複数社の間取りプランと資金計画を無料で取り寄せる",
   },
   {
     slot: "land-use",
     use: "rental",
     url: "",
-    advertiser: "",
-    text: "賃貸経営・土地活用のプランを、複数の会社から無料で取り寄せる",
+    official: "https://www.town-life.jp/land/",
+    advertiser: "タウンライフ土地活用",
+    text: "この規模で、複数社の収益化プランと見積を無料で比較する",
   },
   {
     slot: "land-use-other",
     use: "other",
     url: "",
-    advertiser: "",
-    text: "駐車場・店舗などの土地活用プランを、複数の会社から無料で取り寄せる",
+    official: "https://www.town-life.jp/land/",
+    advertiser: "タウンライフ土地活用",
+    text: "この土地で、複数社の土地活用プランを無料で比較する",
   },
 ];

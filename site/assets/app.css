@@ -154,3 +154,11 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.1rem; }
 .siteinfo .kv td { font-weight: 400; }
 .siteinfo .kv td small { background: none; padding: 0; margin-left: 0; border-radius: 0; }
 .siteinfo .si-item + .si-item { margin-top: 6px; }
+
+/* 【PR】表記（結果ページ）*/
+.pr-top { font-size: .8rem; color: var(--ink-soft); margin: 0 0 8px; }
+.next-step { margin: 12px 0; }
+.next-step h3 { font-size: .85rem; color: var(--ink-soft); margin: 0 0 4px; font-weight: 700; }
+.next-step .ad { margin: 0; }
+.next-step.quiet .ad { border-color: var(--line); }
+.next-step.quiet .ad b { color: var(--ink); font-weight: 500; }

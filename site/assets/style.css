@@ -99,3 +99,16 @@ footer.site nav a { color: var(--ink-soft); margin-right: 1.2em; }
 
 .hero-note { margin-top: 1.2em; font-size: .85rem; color: var(--ink-soft); }
 footer.site nav a { display: inline-block; margin-bottom: 4px; }
+
+/* ガイドページ */
+.guide .pr-label { display: inline-block; font-size: .8rem; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; margin: 0 0 8px; }
+.guide .lead { color: var(--ink-soft); }
+.guide .toc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 18px; margin: 1.5em 0; }
+.guide .toc ol { margin: .4em 0; padding-left: 1.4em; line-height: 1.9; }
+.guide .cta-row { margin: 1.2em 0; }
+.guide .service { background: var(--card); border: 1px solid var(--accent); border-radius: var(--radius); padding: 4px 20px 12px; }
+.guide .service h3 { margin-top: 1em; }
+.guide .hint { background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; font-size: .9rem; }
+.guide .small, .guide ul.small { font-size: .85rem; color: var(--ink-soft); }
+.guide .info-table th { white-space: nowrap; vertical-align: top; }
+@media (max-width: 600px) { .guide .info-table th { white-space: normal; width: 7em; } }

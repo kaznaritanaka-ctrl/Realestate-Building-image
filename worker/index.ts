@@ -134,7 +134,10 @@ async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unkno
 
 async function go(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
   const slot = url.pathname.slice(4);
-  const ad = AD_SLOTS.find(s => s.slot === slot && s.url);
+  const found = AD_SLOTS.find(s => s.slot === slot);
+  // 承認前はアフィリエイトURLがないので、公式サイトへそのまま案内する（クリックは記録しない）
+  if (found && !found.url && found.official) return new Response(null, { status: 302, headers: { location: found.official, "cache-control": "no-store" } });
+  const ad = found?.url ? found : undefined;
   if (!ad) return Response.redirect(`${url.origin}/new.html`, 302);
   const sid = url.searchParams.get("sid");
   if (env.DB) {
