@@ -174,19 +174,18 @@
       <button type="button" role="radio" data-style="white">ホワイト</button>
       <button type="button" role="radio" data-style="black">ブラック</button>
     </div>
-    <div class="views" id="views" hidden>
-      <button type="button" class="btn small round-pill" id="views-toggle" aria-expanded="false" aria-controls="views-panel">視点</button>
-      <div class="views-panel" id="views-panel" hidden>
-        <div class="views-h" role="radiogroup" aria-label="見る高さ">
-          <button type="button" role="radio" data-h="bird" aria-checked="true">鳥瞰</button>
-          <button type="button" role="radio" data-h="eye" aria-checked="false">目線</button>
-        </div>
-        <div class="views-grid" aria-label="見る方向（下が道路側）">
-          <button type="button" data-dir="6">左奥</button><button type="button" data-dir="5">奥</button><button type="button" data-dir="4">右奥</button>
-          <button type="button" data-dir="7">左</button><span class="views-house" aria-hidden="true">建物</span><button type="button" data-dir="3">右</button>
-          <button type="button" data-dir="8">左前</button><button type="button" data-dir="1">前</button><button type="button" data-dir="2">右前</button>
-        </div>
-        <button type="button" class="views-road" data-dir="0">道路から見る</button>
+    <div class="gizmo" id="views" hidden>
+      <div class="gz-ring" role="group" aria-label="見る方向（その方角から建物を見る）">
+        <span class="gz-needle" id="gz-needle" aria-hidden="true"></span>
+        <button type="button" class="gz-dir n" data-side="n" aria-label="北から見る"><i aria-hidden="true"></i>北</button>
+        <button type="button" class="gz-dir e" data-side="e" aria-label="東から見る"><i aria-hidden="true"></i>東</button>
+        <button type="button" class="gz-dir s" data-side="s" aria-label="南から見る"><i aria-hidden="true"></i>南</button>
+        <button type="button" class="gz-dir w" data-side="w" aria-label="西から見る"><i aria-hidden="true"></i>西</button>
+        <button type="button" class="gz-road" id="gz-road" data-side="road" aria-label="道路側から見る"><i aria-hidden="true"></i>道路</button>
+      </div>
+      <div class="gz-h" role="radiogroup" aria-label="見る高さ">
+        <button type="button" role="radio" data-h="bird" aria-checked="true"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>鳥瞰</button>
+        <button type="button" role="radio" data-h="eye" aria-checked="false"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="2.5"></circle><path d="M12 8v7M8 11h8M12 15l-3 6M12 15l3 6"></path></svg>目線</button>
       </div>
     </div>
     <div class="orient" id="orient" hidden>

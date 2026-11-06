@@ -371,3 +371,64 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
 .views-grid button.on, .views-road.on { border: 2px solid var(--accent); background: var(--accent-soft); font-weight: 700; }
 .views-house { display: flex; align-items: center; justify-content: center; font-size: .72rem; color: var(--ink-soft); background: var(--soft); border-radius: 8px; }
 .views-road { width: 100%; background: #eef1f3; }
+
+/* ===== 視点の操作盤（ゲーム・3DCGツール風）：左下に常に表示 ===== */
+.stage .views, .views-panel { display: none !important; }
+.stage .gizmo { position: absolute; left: 10px; bottom: 10px; z-index: 5; display: flex; align-items: flex-end; gap: 8px; user-select: none; }
+.stage .gizmo[hidden] { display: none; }
+.gz-ring { position: relative; width: 148px; height: 148px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 45%, rgba(40,58,64,.88), rgba(18,28,32,.92) 70%);
+  box-shadow: 0 6px 18px rgba(0,0,0,.28), inset 0 0 0 2px rgba(255,255,255,.12), inset 0 0 0 28px rgba(255,255,255,.03); }
+.gz-ring::before { content: ""; position: absolute; inset: 36px; border-radius: 50%; border: 1px dashed rgba(255,255,255,.22); }
+.gz-needle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 22px solid #7ee0b8;
+  transform-origin: 50% 60%; transform: translate(-50%, -50%); filter: drop-shadow(0 0 6px rgba(126,224,184,.7)); pointer-events: none; }
+.gz-dir, .gz-road { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 0; cursor: pointer;
+  font: 700 .78rem/1 "Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; color: #e9f3f0; background: rgba(255,255,255,.1);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; transition: background .12s, transform .12s, box-shadow .12s; }
+.gz-dir i, .gz-road i { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid currentColor; }
+.gz-dir:hover, .gz-road:hover { background: rgba(255,255,255,.22); transform: scale(1.06); }
+.gz-dir.on, .gz-road.on { background: #2fb487; color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.85), 0 0 14px rgba(47,180,135,.8); }
+.gz-dir.n { left: 50%; top: 24px; }
+.gz-dir.s { left: 50%; top: calc(100% - 24px); }
+.gz-dir.s i { order: 2; transform: rotate(180deg); }
+.gz-dir.e { left: calc(100% - 24px); top: 50%; }
+.gz-dir.w { left: 24px; top: 50%; }
+.gz-dir.e i { transform: rotate(90deg); margin-bottom: 2px; }
+.gz-dir.w i { transform: rotate(-90deg); margin-bottom: 2px; }
+.gz-dir.n { color: #ffb4a8; }
+.gz-road { width: 46px; height: 30px; margin: -15px 0 0 -23px; border-radius: 15px; background: #f08a24; color: #fff; font-size: .72rem; flex-direction: row; gap: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.3); z-index: 2; }
+.gz-road i { transform: rotate(calc(var(--rot, 0deg) + 180deg)); border-top-color: #fff; }
+.gz-road:hover { background: #ff9c3a; }
+.gz-road.on { background: #f08a24; box-shadow: 0 0 0 2px #fff, 0 0 14px rgba(240,138,36,.9); }
+.gz-h { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 14px; background: rgba(18,28,32,.88); box-shadow: 0 6px 18px rgba(0,0,0,.28); }
+.gz-h button { width: 56px; height: 52px; border: 0; border-radius: 10px; cursor: pointer; background: rgba(255,255,255,.08); color: #cfe2dc;
+  font: 700 .72rem/1.1 "Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.gz-h button:hover { background: rgba(255,255,255,.18); }
+.gz-h button[aria-checked="true"] { background: #2fb487; color: #fff; box-shadow: 0 0 12px rgba(47,180,135,.7); }
+/* 向きの回転は右下にコンパクトに */
+.stage .orient { right: 10px; bottom: 10px; }
+.stage .orient .orient-mid { min-width: 0; max-width: 96px; }
+.stage .orient .orient-mid b { white-space: normal; font-size: .7rem; line-height: 1.25; }
+@media (max-width: 760px) {
+  .gz-ring { width: 132px; height: 132px; }
+  .gz-ring::before { inset: 32px; }
+  .gz-dir.n { top: 22px; } .gz-dir.s { top: calc(100% - 22px); } .gz-dir.e { left: calc(100% - 22px); } .gz-dir.w { left: 22px; }
+  .gz-h button { width: 50px; height: 48px; }
+  .stage .orient .btn.round { width: 40px; height: 40px; }
+  .stage .orient .orient-mid { max-width: 70px; }
+}
+.stage .gizmo { left: 26px; bottom: 26px; }
+.gz-road { width: auto; min-width: 50px; padding: 0 8px; white-space: nowrap; }
+/* 向きの回転は右上（外観の切り替えの下）へ */
+.stage .orient { top: 62px; bottom: auto; right: 10px; }
+@media (max-width: 760px) {
+  .stage .gizmo { left: 18px; bottom: 40px; gap: 6px; }
+  .gz-ring { width: 112px; height: 112px; }
+  .gz-ring::before { inset: 28px; }
+  .gz-dir { width: 38px; height: 38px; margin: -19px 0 0 -19px; font-size: .7rem; }
+  .gz-dir.n { top: 20px; } .gz-dir.s { top: calc(100% - 20px); } .gz-dir.e { left: calc(100% - 20px); } .gz-dir.w { left: 20px; }
+  .gz-needle { border-left-width: 6px; border-right-width: 6px; border-bottom-width: 18px; }
+  .gz-h button { width: 46px; height: 42px; font-size: .66rem; }
+  .gz-h button svg { width: 16px; height: 16px; }
+  .stage .orient { top: 58px; }
+}

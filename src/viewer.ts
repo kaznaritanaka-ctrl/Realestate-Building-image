@@ -75,6 +75,7 @@ export class Viewer {
       this.dirty = false;
       this.context?.update(this.renderer);
       this.renderer.render(this.scene, this.camera);
+      this.onBearing(this.bearing());
     };
     loop();
   }
@@ -226,8 +227,11 @@ export class Viewer {
     this.camera.position.set(cu + d * 0.75, d * 0.75, -cv + d * 1.0);
     this.controls.target.set(cu, 2, -cv);
     this.controls.update();
-    // 視点ボタン用：敷地の中心と、道路のある向き（敷地の中心→道路の中心）
+    // 視点ボタン用：敷地の中心、方位（北・東）、道路のある向き（敷地の中心→道路の中心）
     this.viewBase.center.set(cu, 0, -cv); this.viewBase.span = span;
+    const { ux, vx } = res.site.frame; // 局所平面（x＝東, y＝北）→ (u,v)。画面の座標は (u, 0, -v)
+    this.viewBase.north.set(ux[1], 0, -vx[1]).normalize();
+    this.viewBase.east.set(ux[0], 0, -vx[0]).normalize();
     const roads = res.site.roadsUV.flat();
     if (roads.length) {
       const ru = roads.reduce((a, p) => a + p[0], 0) / roads.length, rv = roads.reduce((a, p) => a + p[1], 0) / roads.length;
@@ -237,32 +241,34 @@ export class Viewer {
   }
 
   private anim: { t0: number; ms: number; fromPos: THREE.Vector3; toPos: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3 } | null = null;
-  private viewBase = { center: new THREE.Vector3(), road: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1), span: 10 };
+  private viewBase = { center: new THREE.Vector3(), road: new THREE.Vector3(), front: new THREE.Vector3(0, 0, 1), north: new THREE.Vector3(0, 0, -1), east: new THREE.Vector3(1, 0, 0), span: 10 };
+  /** 描くたびに、カメラが向いている方位（北から時計回りのラジアン）を知らせる */
+  onBearing: (rad: number) => void = () => {};
+  /** 道路のある方位（北から時計回りのラジアン）。道路がなければ null */
+  roadBearing(): number | null {
+    const { front: f, north: n, east: e } = this.viewBase;
+    return Math.atan2(f.dot(e), f.dot(n));
+  }
+  private bearing(): number {
+    const look = this.controls.target.clone().sub(this.camera.position).setY(0);
+    const { north: n, east: e } = this.viewBase;
+    return Math.atan2(look.dot(e), look.dot(n));
+  }
   /**
-   * 決まった視点へ動かす。dir：0＝道路から、1〜8＝前・右前・右・右奥・奥・左奥・左・左前（道路側から見て）
+   * 決まった視点へ動かす。side：その方角に立って建物を見る（n/e/s/w）、road＝道路側から
    * height：bird＝鳥瞰、eye＝人の目線（地面から1.6m）
    */
-  setView(dir: number, height: "bird" | "eye") {
-    const { center: c, road, front: f, span } = this.viewBase;
+  setView(side: "n" | "e" | "s" | "w" | "road", height: "bird" | "eye") {
+    const { road, front: f, north, east, span } = this.viewBase;
     const box = new THREE.Box3().setFromObject(this.planGroup);
     const ht = box.isEmpty() ? 3 : Math.max(box.max.y, 3);
-    const bc = box.isEmpty() ? c.clone() : box.getCenter(new THREE.Vector3()).setY(0);
-    const right = new THREE.Vector3(f.z, 0, -f.x); // 道路側から建物を見たときの右
+    const bc = box.isEmpty() ? this.viewBase.center.clone() : box.getCenter(new THREE.Vector3()).setY(0);
     const d = span * 1.15 + ht * 1.6 + 8;
-    let pos: THREE.Vector3, target: THREE.Vector3;
-    if (dir === 0) {
-      // 道路の上（敷地の正面）に立って見る
-      // 建物から道路の先へ、全体が入る距離まで下がる
-      const back = Math.max(bc.distanceTo(road) + 4, d * 0.8);
-      const base = bc.clone().addScaledVector(f, back);
-      pos = height === "eye" ? base.setY(1.6) : base.addScaledVector(f, d * 0.1).setY(d * 0.75);
-      target = bc.clone().setY(height === "eye" ? ht * 0.45 : 1.5);
-    } else {
-      const phi = ((dir - 1) * Math.PI) / 4;
-      const v = f.clone().multiplyScalar(Math.cos(phi)).addScaledVector(right, Math.sin(phi)).normalize();
-      pos = height === "eye" ? bc.clone().addScaledVector(v, d * 0.85).setY(1.6) : bc.clone().addScaledVector(v, d * 0.7).setY(d * 0.8);
-      target = bc.clone().setY(height === "eye" ? ht * 0.45 : 1.5);
-    }
+    const v = side === "road" ? f.clone() : side === "n" ? north.clone() : side === "s" ? north.clone().negate() : side === "e" ? east.clone() : east.clone().negate();
+    // 道路側から見るときは、道路の先まで下がって全体を入れる
+    const back = side === "road" ? Math.max(bc.distanceTo(road) + 4, d * 0.8) : d * 0.85;
+    const pos = height === "eye" ? bc.clone().addScaledVector(v, back).setY(1.6) : bc.clone().addScaledVector(v, back * 0.82).setY(d * 0.8);
+    const target = bc.clone().setY(height === "eye" ? ht * 0.45 : 1.5);
     this.anim = { t0: performance.now(), ms: 450, fromPos: this.camera.position.clone(), toPos: pos, fromTarget: this.controls.target.clone(), toTarget: target };
     this.requestRender(600);
   }

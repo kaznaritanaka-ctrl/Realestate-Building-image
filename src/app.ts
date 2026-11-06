@@ -370,25 +370,33 @@ $("#pv-print").addEventListener("click", () => { track("save_result", { via: "pr
 $("#pv-close").addEventListener("click", () => { $("#print-view").hidden = true; ($("#pdf-btn") as HTMLButtonElement).focus(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#print-view").hidden) $("#print-view").hidden = true; });
 
-// 視点のプリセット：9方向（道路から＋8方向）×鳥瞰／目線。手で回す操作もそのまま使える
+// 視点の操作盤：東西南北と道路側からの内向き矢印 × 鳥瞰／目線（合計10通り）。手で回す操作もそのまま使える
 let viewH: "bird" | "eye" = "bird";
-let viewDir = -1;
+let viewSide: "n" | "e" | "s" | "w" | "road" | "" = "";
 function paintViews() {
-  $$<HTMLButtonElement>("#views-panel [data-h]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.h === viewH)));
-  $$<HTMLButtonElement>("#views-panel [data-dir]").forEach(b => b.classList.toggle("on", Number(b.dataset.dir) === viewDir));
+  $$<HTMLButtonElement>("#views [data-h]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.h === viewH)));
+  $$<HTMLButtonElement>("#views [data-side]").forEach(b => b.classList.toggle("on", b.dataset.side === viewSide));
 }
-$("#views-toggle").addEventListener("click", () => {
-  const p = $("#views-panel"); p.hidden = !p.hidden;
-  $("#views-toggle").setAttribute("aria-expanded", String(!p.hidden));
-});
-$$<HTMLButtonElement>("#views-panel [data-h]").forEach(b => b.addEventListener("click", () => {
-  viewH = b.dataset.h as "bird" | "eye"; paintViews();
-  viewer?.setView(viewDir < 0 ? 1 : viewDir, viewH); if (viewDir < 0) { viewDir = 1; paintViews(); }
-  track("view", { h: viewH, dir: viewDir });
+function placeRoadButton() {
+  const rb = viewer?.roadBearing();
+  const b = $("#gz-road");
+  if (rb == null || !result?.site.roadsUV.length) { b.hidden = true; return; }
+  b.hidden = false;
+  // 輪の外側、道路のある方位に置く。ボタンの矢印は建物（中心）を向く
+  const R = $(".gz-ring").offsetWidth / 2 + 4;
+  b.style.left = `calc(50% + ${(Math.sin(rb) * R).toFixed(1)}px)`;
+  b.style.top = `calc(50% - ${(Math.cos(rb) * R).toFixed(1)}px)`;
+  b.style.setProperty("--rot", `${(rb * 180) / Math.PI + 180}deg`);
+}
+addEventListener("resize", () => { if (state.step === 6) placeRoadButton(); });
+$$<HTMLButtonElement>("#views [data-side]").forEach(b => b.addEventListener("click", () => {
+  viewSide = b.dataset.side as typeof viewSide; paintViews(); viewer?.setView(viewSide as Exclude<typeof viewSide, "">, viewH);
+  track("view", { h: viewH, dir: viewSide });
 }));
-$$<HTMLButtonElement>("#views-panel [data-dir]").forEach(b => b.addEventListener("click", () => {
-  viewDir = Number(b.dataset.dir); paintViews(); viewer?.setView(viewDir, viewH);
-  track("view", { h: viewH, dir: viewDir });
+$$<HTMLButtonElement>("#views [data-h]").forEach(b => b.addEventListener("click", () => {
+  viewH = b.dataset.h as "bird" | "eye"; if (!viewSide) viewSide = "road"; paintViews();
+  viewer?.setView(viewSide as Exclude<typeof viewSide, "">, viewH);
+  track("view", { h: viewH, dir: viewSide });
 }));
 
 // 外観のスタイル（和風・ホワイト・ブラック）
@@ -639,9 +647,14 @@ const CERT: Record<string, string> = { confirmed: "確認済み", public: "公�
 
 function renderResult() {
   if (!result) return;
-  if (!viewer) { viewer = new Viewer($("#viewer")); viewer.setStyle(state.style ?? "white"); }
+  if (!viewer) {
+    viewer = new Viewer($("#viewer")); viewer.setStyle(state.style ?? "white");
+    const needle = $("#gz-needle");
+    viewer.onBearing = (rad) => { needle.style.transform = `translate(-50%, -50%) rotate(${((rad * 180) / Math.PI).toFixed(1)}deg)`; };
+  }
   paintStyle();
   viewer.setSite(result);
+  placeRoadButton();
   renderContext(result);
   const tabs = $("#plan-tabs"); tabs.innerHTML = "";
   result.plans.forEach((p, i) => {
