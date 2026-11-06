@@ -448,3 +448,36 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
   .gz-dir i { border-left-width: 5px; border-right-width: 5px; border-top-width: 6px; }
   .stage .gizmo { bottom: 38px; left: 14px; }
 }
+
+/* 方位の輪と高さの切り替えの間をあける（道路ボタンがはみ出しても重ならないように） */
+.stage .gizmo { gap: 22px; }
+.ctrl-slot[hidden] { display: none; }
+@media (max-width: 760px) {
+  /* スマホ：操作は下のシートの上部に並べる */
+  .ctrl-slot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; padding: 6px 0 16px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .ctrl-slot .gizmo { position: static; display: flex; align-items: center; gap: 18px; padding-bottom: 14px; }
+  .ctrl-slot .gizmo[hidden], .ctrl-slot .orient[hidden] { display: none; }
+  .ctrl-slot .orient { position: static; display: flex; align-items: center; gap: 6px; background: var(--soft); border-radius: 26px; padding: 4px; box-shadow: none; }
+  .ctrl-slot .orient .btn.round { width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 1.1rem; }
+  .ctrl-slot .orient .orient-mid { max-width: 170px; min-width: 120px; }
+  .ctrl-slot .orient .orient-mid b { white-space: nowrap; font-size: .78rem; }
+  .ctrl-slot .gz-ring { width: 150px; height: 150px; }
+  .ctrl-slot .gz-ring::before { inset: 40px; }
+  .ctrl-slot .gz-dir { width: 36px; height: 36px; margin: -18px 0 0 -18px; font-size: .66rem; }
+  .ctrl-slot .gz-dir.ne, .ctrl-slot .gz-dir.se, .ctrl-slot .gz-dir.sw, .ctrl-slot .gz-dir.nw { font-size: .56rem; }
+  .ctrl-slot .gz-h { flex-direction: column; }
+  .ctrl-slot .gz-h button { width: 64px; height: 52px; font-size: .74rem; }
+  .ctrl-slot .gz-h button svg { width: 18px; height: 18px; }
+}
+@media (max-width: 760px) {
+  /* 1行に収める：方位の輪｜高さ｜向きの回転（縦） */
+  .ctrl-slot { flex-wrap: nowrap; gap: 12px; padding: 4px 0 12px; }
+  .ctrl-slot .gizmo { gap: 12px; padding-bottom: 14px; }
+  .ctrl-slot .gz-ring { width: 140px; height: 140px; }
+  .ctrl-slot .gz-ring::before { inset: 37px; }
+  .ctrl-slot .gz-h button { width: 56px; height: 50px; }
+  .ctrl-slot .orient { flex-direction: column; border-radius: 24px; padding: 4px; gap: 4px; }
+  .ctrl-slot .orient .orient-mid { min-width: 0; max-width: 72px; }
+  .ctrl-slot .orient .orient-mid b { white-space: normal; font-size: .62rem; line-height: 1.25; text-align: center; }
+  .ctrl-slot .orient .orient-mid .linklike { font-size: .62rem; }
+}

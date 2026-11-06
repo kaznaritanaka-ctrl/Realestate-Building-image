@@ -396,6 +396,18 @@ function placeRoadButton() {
   b.style.top = `calc(50% - ${(Math.cos(rb) * R).toFixed(1)}px)`;
   b.style.setProperty("--rot", `${(rb * 180) / Math.PI + 180}deg`);
 }
+// スマホでは視点と向きの操作を3Dの外（下のシートの上部）に置く。パソコンでは3Dの上に重ねる
+const MOBILE = matchMedia("(max-width: 760px)");
+function placeControls() {
+  const slot = $("#ctrl-slot"), stage = $(".stage");
+  const g = $("#views"), o = $("#orient");
+  const target = MOBILE.matches ? slot : stage;
+  if (g.parentElement !== target) { target.appendChild(g); target.appendChild(o); }
+  slot.hidden = !MOBILE.matches;
+  if (state.step === 6) placeRoadButton();
+}
+MOBILE.addEventListener("change", placeControls);
+placeControls();
 addEventListener("resize", () => { if (state.step === 6) placeRoadButton(); });
 $$<HTMLButtonElement>("#views [data-side]").forEach(b => b.addEventListener("click", () => {
   viewSide = b.dataset.side as typeof viewSide; paintViews(); viewer?.setView(viewSide as ViewSide, viewH);
