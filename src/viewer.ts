@@ -18,11 +18,22 @@ export class Viewer {
   private footprints: FootprintContext | null = null;
   private contextKey = "";
   private sitePoly: [number, number][] = [];
+  // 描くのは変化があったときだけ（止まっている間は描き直さない）。影も形が変わったときだけ計算する
+  private dirty = true;
+  private busyUntil = 0;
+  /** 次のフレームで描き直す。ms を渡すとその間は描き続ける（読み込み中・慣性の回転など） */
+  requestRender(ms = 0, shadows = false) {
+    this.dirty = true;
+    if (ms) this.busyUntil = Math.max(this.busyUntil, performance.now() + ms);
+    if (shadows) this.renderer.shadowMap.needsUpdate = true;
+  }
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const coarse = matchMedia("(pointer: coarse)").matches;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     el.appendChild(this.renderer.domElement);
     this.scene.background = new THREE.Color(0xf3f5f6);
@@ -34,14 +45,30 @@ export class Viewer {
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(-40, 60, 30);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
     const sc = sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.far = 300;
     this.scene.add(sun, this.siteGroup, this.planGroup);
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(el);
     this.resize();
-    const loop = () => { this.controls.update(); this.context?.update(this.renderer); this.renderer.render(this.scene, this.camera); this.raf = requestAnimationFrame(loop); };
+    this.controls.addEventListener("start", () => this.requestRender(60000));
+    // 指を離したあとも、慣性の間とPLATEAUの読み込みのために少しだけ描き続ける
+    this.controls.addEventListener("end", () => { this.busyUntil = performance.now() + (this.context ? 2000 : 300); });
+    this.controls.dampingFactor = 0.12; // 慣性を短めに（止まったら描くのをやめるため）
+    const lastPos = new THREE.Vector3(), lastTarget = new THREE.Vector3();
+    const loop = () => {
+      this.raf = requestAnimationFrame(loop);
+      this.controls.update();
+      // 慣性の動きが目に見えないほど小さくなったら「止まった」とみなす
+      const dist = this.camera.position.distanceTo(this.controls.target) || 1;
+      const moved = this.camera.position.distanceTo(lastPos) + this.controls.target.distanceTo(lastTarget) > dist * 2e-4;
+      if (moved) { lastPos.copy(this.camera.position); lastTarget.copy(this.controls.target); }
+      if (!(moved || this.dirty || performance.now() < this.busyUntil)) return;
+      this.dirty = false;
+      this.context?.update(this.renderer);
+      this.renderer.render(this.scene, this.camera);
+    };
     loop();
   }
 
@@ -52,6 +79,7 @@ export class Viewer {
     this.renderer.domElement.style.height = "100%";
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.requestRender?.(0, true);
   }
 
   /** 周辺建物（PLATEAU）を表示。同じ条件なら作り直さない */
@@ -63,7 +91,12 @@ export class Viewer {
     this.footprints?.dispose(this.scene); this.footprints = null;
     if (!opts) return;
     this.context = new PlateauContext(opts, this.camera, this.renderer, this.scene);
-    if (onStatus) this.context.onStatus = onStatus;
+    this.requestRender(20000, true); // 読み込みが終わるまで描き続ける
+    this.context.onStatus = (st) => {
+      if (st === "ready" || st === "error") { this.busyUntil = performance.now() + 800; this.requestRender(0, true); }
+      else this.requestRender(20000, true);
+      onStatus?.(st);
+    };
   }
 
   /** PLATEAUがない地域：国土地理院の建物外形を押し出して表示 */
@@ -74,6 +107,7 @@ export class Viewer {
     this.context?.dispose(this.scene); this.context = null;
     this.footprints?.dispose(this.scene); this.footprints = null;
     this.footprints = new FootprintContext(buildings, origin, frame, site, this.scene);
+    this.requestRender(0, true);
   }
 
   /** 視点を決めて、白模型・深度・法線・マスクを描画する（ControlNet用の制御画像の素材） */
@@ -96,6 +130,7 @@ export class Viewer {
 
     // 1) 白模型（影・周辺建物つき）
     this.context?.update(r);
+    r.shadowMap.needsUpdate = true;
     r.render(this.scene, cam);
     const base = grab();
     // 2) 深度（近いほど白）・3) 法線：シーン全体に上書きマテリアル
@@ -134,6 +169,7 @@ export class Viewer {
     cam.position.copy(saved.pos); cam.aspect = saved.aspect; cam.near = saved.near; cam.far = saved.far; cam.updateProjectionMatrix();
     this.controls.target.copy(saved.target);
     r.setPixelRatio(saved.pr); r.setSize(saved.size.x, saved.size.y, false);
+    this.requestRender(0, true);
     this.renderer.domElement.style.width = "100%"; this.renderer.domElement.style.height = "100%";
     return { base, depth, normal, mask, camera };
   }
@@ -153,6 +189,7 @@ export class Viewer {
   dispose() { this.context?.dispose(this.scene); cancelAnimationFrame(this.raf); this.ro.disconnect(); this.renderer.dispose(); this.el.innerHTML = ""; }
 
   setSite(res: EngineResult) {
+    this.requestRender(0, true);
     clear(this.siteGroup);
     const P = res.site.polygonUV;
     this.sitePoly = P as [number, number][];
@@ -194,6 +231,7 @@ export class Viewer {
 
   setPlan(plan: Plan, rotation = 0) {
     this.lastPlan = { plan, rotation };
+    this.requestRender(0, true);
     clear(this.planGroup);
     this.planGroup.rotation.y = rotation; // (s,t) 系を (u,v) 系へ
     const pal = PALETTES[this.style];
@@ -206,7 +244,7 @@ export class Viewer {
   }
 
   snapshot(type = "image/png", quality?: number): string {
-    this.controls.update(); this.renderer.render(this.scene, this.camera);
+    this.controls.update(); this.renderer.shadowMap.needsUpdate = true; this.renderer.render(this.scene, this.camera);
     return this.renderer.domElement.toDataURL(type, quality);
   }
 }
