@@ -99,9 +99,14 @@ const zoomWarn = () => { $("#zoom-warn").hidden = !(state.step === 2 && map.getZ
 map.on("zoomend", zoomWarn);
 map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); track("located", { via: "move" }); } });
 
+// 頂点の近くを触ったときは追加しない（ドラッグのつもりで少しずれた場合）。指ではさらに広めに取る
+const COARSE = matchMedia("(pointer: coarse)").matches;
+const NEAR_PX = COARSE ? 36 : 16;
 map.on("click", (e) => {
   if (state.step !== 2) return;
   if (map.getZoom() < MIN_DRAW_ZOOM) { zoomWarn(); return; }
+  const near = state.points.some(p => { const q = map.project(p as [number, number]); return Math.hypot(q.x - e.point.x, q.y - e.point.y) < NEAR_PX; });
+  if (near) return;
   state.points.push([e.lngLat.lng, e.lngLat.lat]);
   state.edges = [];
   save(); redrawMap(); updateArea(); paintStepper();

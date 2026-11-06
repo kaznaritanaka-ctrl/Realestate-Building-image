@@ -279,3 +279,8 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 @media (max-width: 760px) {
   .app-body header.site .wrap { height: auto; padding: 6px 8px; }
 }
+
+/* 頂点：見た目は小さいまま、つかめる範囲を広げる（指で44px以上） */
+.vtx { position: relative; touch-action: none; }
+.vtx::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; }
+@media (pointer: coarse) { .vtx { width: 20px; height: 20px; } .vtx::after { inset: -16px; } }
