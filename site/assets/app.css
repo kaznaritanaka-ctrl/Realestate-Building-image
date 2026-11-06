@@ -481,3 +481,36 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
   .ctrl-slot .orient .orient-mid b { white-space: normal; font-size: .62rem; line-height: 1.25; text-align: center; }
   .ctrl-slot .orient .orient-mid .linklike { font-size: .62rem; }
 }
+
+/* 注意事項：1行にまとめ、押すと開く */
+.area-warn { margin-bottom: 10px; }
+.area-warn details { background: #fff4ec; border: 1px solid #e7a77c; border-radius: 12px; color: #6b3414; }
+.area-warn summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; font-weight: 700; font-size: .92rem; list-style: none; }
+.area-warn summary::-webkit-details-marker { display: none; }
+.area-warn summary::after { content: "▾"; margin-left: auto; font-size: .8rem; }
+.area-warn details[open] summary::after { content: "▴"; }
+.area-warn summary small { font-weight: 400; font-size: .75rem; opacity: .8; }
+.warn-mark { width: 22px; height: 22px; flex: none; border-radius: 50%; background: #d9692b; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; }
+.area-warn details p { margin: 0; padding: 0 12px 10px; font-size: .85rem; line-height: 1.7; }
+.plan-mini { display: none; }
+@media (max-width: 760px) {
+  /* スマホの結果：1画面目は「上に3D、下に操作パネル」。下へスクロールすると詳しい内容 */
+  body[data-mode="result"] .app { display: block; overflow-y: auto; }
+  body[data-mode="result"] .stage { height: 60vh; position: relative; }
+  body[data-mode="result"] .panel { overflow: visible; margin-top: 0; border-radius: 0; box-shadow: none; padding-top: 0; }
+  .ctrl-slot { flex-wrap: wrap; justify-content: center; margin: 0 -18px 12px; padding: 10px 12px 12px; background: #fff; border-bottom: 1px solid var(--line); }
+  .ctrl-slot .plan-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; width: 100%; background: var(--soft); border-radius: 10px; padding: 3px; }
+  .plan-mini button { font: inherit; font-size: .8rem; height: 38px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plan-mini button[aria-checked="true"] { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .ctrl-slot .style-pick { position: static; width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--soft); box-shadow: none; border-radius: 10px; }
+  .ctrl-slot .style-pick[hidden] { display: none; }
+  .ctrl-slot .style-pick button { height: 36px; border-radius: 8px; }
+}
+@media (max-width: 760px) {
+  body[data-mode="result"] .app { display: flex; flex-direction: column; }
+  body[data-mode="result"] .stage { order: 0; flex: none; }
+  body[data-mode="result"] .panel { order: 1; flex: none; }
+  body[data-mode="result"] .actions { position: static; }
+  .ctrl-slot .area-warn { width: 100%; margin: 0; }
+  .ctrl-slot .area-warn summary { padding: 8px 10px; font-size: .85rem; }
+}

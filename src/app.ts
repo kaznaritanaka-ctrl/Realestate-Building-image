@@ -237,6 +237,8 @@ function go(step: number) {
   $("#orient").hidden = !show3d;
   $("#style-pick").hidden = !show3d;
   $("#views").hidden = !show3d;
+  fitMobileStage();
+  if (show3d) ($(".app") as HTMLElement).scrollTop = 0;
   if (step === 2) { updateArea(); zoomWarn(); }
   if (step === 3) renderEdgeList();
   if (step === 4) renderZone();
@@ -400,12 +402,25 @@ function placeRoadButton() {
 const MOBILE = matchMedia("(max-width: 760px)");
 function placeControls() {
   const slot = $("#ctrl-slot"), stage = $(".stage");
-  const g = $("#views"), o = $("#orient");
+  const g = $("#views"), o = $("#orient"), sp = $("#style-pick"), pm = $("#plan-mini");
   const target = MOBILE.matches ? slot : stage;
-  if (g.parentElement !== target) { target.appendChild(g); target.appendChild(o); }
+  if (g.parentElement !== target) {
+    const w = $("#area-warn"), sec = $('section[data-step="6"]');
+    if (MOBILE.matches) { slot.append(w, pm, sp, g, o); } else { stage.append(sp, g, o); slot.prepend(pm); sec.insertBefore(w, slot); }
+  }
   slot.hidden = !MOBILE.matches;
+  fitMobileStage();
   if (state.step === 6) placeRoadButton();
 }
+// スマホの結果画面：3Dと操作パネルでちょうど1画面になるよう、3Dの高さを合わせる
+function fitMobileStage() {
+  const stage = $(".stage") as HTMLElement;
+  if (!MOBILE.matches || state.step !== 6) { stage.style.height = ""; return; }
+  const hdr = ($("header.site") as HTMLElement).offsetHeight;
+  const ctrl = ($("#ctrl-slot") as HTMLElement).offsetHeight;
+  stage.style.height = `${Math.max(220, innerHeight - hdr - ctrl)}px`;
+}
+addEventListener("resize", fitMobileStage);
 MOBILE.addEventListener("change", placeControls);
 placeControls();
 addEventListener("resize", () => { if (state.step === 6) placeRoadButton(); });
@@ -622,13 +637,15 @@ async function loadSiteInfo(): Promise<SiteInfo> {
 function paintSiteInfo() {
   if (!result) return;
   const ctrl = areaClass(siteInfo) === "control";
-  const warn = $("#area-warn");
-  warn.hidden = !ctrl;
-  warn.innerHTML = ctrl ? CONTROL_WARNING : "";
   const box = $("#site-info-box");
   const open = !!box.querySelector("details")?.open;
   const html = siteInfoHtml(siteInfo, result.site.area).replace(/^<b>この土地の参考情報<\/b>/, "");
   const n = (html.match(/class="attn"/g) || []).length;
+  // 市街化調整区域のときは、上部に「！注意事項がN件」の1行だけ出し、押すと本文を開く
+  const warn = $("#area-warn");
+  warn.hidden = !ctrl;
+  const wasOpen = !!warn.querySelector("details")?.open;
+  warn.innerHTML = ctrl ? `<details${wasOpen ? " open" : ""}><summary><span class="warn-mark" aria-hidden="true">！</span><span>注意事項が${Math.max(n, 1)}件あります</span><small>市街化調整区域ほか</small></summary><p>${CONTROL_WARNING}</p><p class="muted">ほかの注意事項は「この土地の参考情報」に載せています。</p></details>` : "";
   box.innerHTML = `<details${open ? " open" : ""}><summary><span>この土地の参考情報</span>${n ? `<span class="badge">確認したい点 ${n}</span>` : ""}</summary>${html}</details>`;
 }
 
@@ -690,6 +707,16 @@ function renderResult() {
     tabs.appendChild(b);
   });
   requestAnimationFrame(() => (tabs.children[activePlan] as HTMLElement | undefined)?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }));
+  // スマホの操作パネル用：案の切り替え（小さめ・中間・上限）
+  const mini = $("#plan-mini"); mini.innerHTML = "";
+  result.plans.forEach((p, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.role = "radio";
+    b.setAttribute("aria-checked", String(i === activePlan));
+    b.textContent = `${p.id} ${p.title.replace(/^[ABC]案：/, "")}`;
+    b.addEventListener("click", () => { if (activePlan === i) return; activePlan = i; renderResult(); track("plan_tab", { plan: p.id, size: p.size, use: p.use }); });
+    mini.appendChild(b);
+  });
+  requestAnimationFrame(fitMobileStage);
   const p = result.plans[activePlan];
   viewer.setPlan(p, result.site.rotation);
   paintOrient();
