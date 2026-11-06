@@ -6,12 +6,15 @@ import { PlateauContext, FootprintContext, type ContextOptions, type FootprintBu
 import { linearDepthMaterial, normalMaterial } from "./passes.ts";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 // 自作の車モデル（前＝-Z、上＝+Y、原点＝地面の中央）。結果画面に入ったときに一度だけ読み込む
 const CAR_FILES = ["car_liftback_v2", "car_minivan_v1", "car_kei_v1"];
 let carModels: THREE.Object3D[] | null = null;
-let carEnv: THREE.Texture | null = null;
 let carLoading: Promise<void> | null = null;
 function loadCars(): Promise<void> {
   if (carLoading) return carLoading;
@@ -20,9 +23,6 @@ function loadCars(): Promise<void> {
     g.scene.traverse(o => {
       const m = o as THREE.Mesh; if (!m.isMesh) return;
       m.castShadow = true; m.receiveShadow = true;
-      for (const mat of (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]) {
-        if ("envMap" in mat) { mat.envMap = carEnv; mat.envMapIntensity = 0.7; mat.needsUpdate = true; }
-      }
     });
     return g.scene;
   }))).then(list => { carModels = list; }).catch(() => { carModels = []; /* 読み込めなければ箱の車のまま */ });
@@ -59,23 +59,42 @@ export class Viewer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.autoUpdate = false;
     texListeners.add(() => this.requestRender(0, true)); // 質感の画像が届いたら描き直す
-    // 車の塗装やガラスの映り込み用の環境マップ（車の材質だけに使う。シーン全体に掛けると地面や建物が白飛びする）
-    if (!carEnv) { const pmrem = new THREE.PMREMGenerator(this.renderer); carEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture; pmrem.dispose(); }
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // 影の縁をやわらかく。色は映画と同じ ACES で整える（明るいところが白く飛びにくい）
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = EXPOSURE;
     el.appendChild(this.renderer.domElement);
-    this.scene.background = new THREE.Color(0xf3f5f6);
+    this.scene.background = skyGradient();
+    // 空の写真（Poly Haven の CC0 HDRI）を環境光と映り込みに使う。届くまでは今の明かりだけで描く
+    new HDRLoader().load("/assets/tex/sky_suburban_garden.hdr", (hdr) => {
+      hdr.mapping = THREE.EquirectangularReflectionMapping;
+      this.scene.environment = hdr; this.scene.environmentIntensity = ENV_INTENSITY;
+      this.requestRender(0, true);
+    });
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 2000);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = false; // 手を止めたらすぐ止まる（慣性なし）
     this.controls.maxPolarAngle = Math.PI * 0.48;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc2ccd0, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc2ccd0, HEMI));
+    const sun = new THREE.DirectionalLight(0xfff4e6, SUN); // 少し暖かい日差し
     sun.position.set(-40, 60, 30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
     const sc = sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.far = 300;
+    sun.shadow.radius = 3; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
     this.scene.add(sun, this.siteGroup, this.planGroup);
+    // パソコン（マウス操作）だけ、隅や接地面に柔らかい陰（GTAO）を足す。スマホは重いので使わない
+    if (!coarse && !/[?&]noao\b/.test(location.search)) {
+      const c = new EffectComposer(this.renderer);
+      c.addPass(new RenderPass(this.scene, this.camera));
+      const ao = new GTAOPass(this.scene, this.camera, 600, 400);
+      ao.updateGtaoMaterial({ radius: 2, distanceExponent: 1, thickness: 2, scale: 1, samples: 16 });
+      ao.blendIntensity = 0.85;
+      c.addPass(ao);
+      c.addPass(new OutputPass());
+      this.composer = c;
+    }
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(el);
     this.resize();
@@ -101,15 +120,19 @@ export class Viewer {
       if (!(moved || this.dirty || performance.now() < this.busyUntil)) return;
       this.dirty = false;
       this.context?.update(this.renderer);
-      this.renderer.render(this.scene, this.camera);
+      this.draw();
       this.onBearing(this.bearing());
     };
     loop();
   }
 
+  private composer: EffectComposer | null = null;
+  private draw() { if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera); }
+
   private resize() {
     const w = this.el.clientWidth || 600, h = this.el.clientHeight || 400;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
     this.renderer.domElement.style.width = "100%";
     this.renderer.domElement.style.height = "100%";
     this.camera.aspect = w / h;
@@ -182,6 +205,7 @@ export class Viewer {
       if ((o as THREE.Mesh).isMesh) swapped.push([o as THREE.Mesh, (o as THREE.Mesh).material]);
     });
     const apply = (kind: "depth" | "normal") => swapped.forEach(([m]) => { m.material = mats[kind][isCtx(m) ? 1 : 0]; });
+    const tm = r.toneMapping; r.toneMapping = THREE.NoToneMapping; // 深度・法線・マスクは値そのものを書き出す
     this.scene.background = new THREE.Color(0x000000);
     apply("depth"); r.render(this.scene, cam); const depth = grab();
     this.scene.background = new THREE.Color(0x8080ff);
@@ -199,6 +223,7 @@ export class Viewer {
     this.scene.overrideMaterial = null;
     hidden.forEach(o => (o.visible = true)); hideLines.forEach(o => (o.visible = true));
     white.dispose();
+    r.toneMapping = tm;
     this.scene.background = saved.bg;
     const camera = { position: cam.position.toArray(), target: target.toArray(), fov: cam.fov, near: cam.near, far: cam.far, width: w, height: h };
     cam.position.copy(saved.pos); cam.aspect = saved.aspect; cam.near = saved.near; cam.far = saved.far; cam.updateProjectionMatrix();
@@ -233,7 +258,7 @@ export class Viewer {
     const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
     const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), 10);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(span * 8, span * 8), new THREE.MeshLambertMaterial({ color: 0xe9edee }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(span * 8, span * 8), new THREE.MeshStandardMaterial({ color: 0xe9edee }));
     ground.rotation.x = -Math.PI / 2; ground.position.set(cu, -0.02, -cv); ground.receiveShadow = true;
     this.siteGroup.add(ground);
 
@@ -242,7 +267,7 @@ export class Viewer {
       m.rotation.x = -Math.PI / 2; m.position.y = 0.0; m.receiveShadow = true;
       this.siteGroup.add(m);
     }
-    const site = new THREE.Mesh(shapeGeom(P), texMat("ground_grass", 0xd6f0b8, 0.6, THREE.FrontSide, 1.35));
+    const site = new THREE.Mesh(shapeGeom(P), texMat("ground_grass", 0xc8e6a8, 0.6, THREE.FrontSide, 1.1));
     site.rotation.x = -Math.PI / 2; site.position.y = 0.01; site.receiveShadow = true;
     this.siteGroup.add(site);
     const pts = P.map(([u, v]) => new THREE.Vector3(u, 0.03, -v));
@@ -328,7 +353,7 @@ export class Viewer {
   }
 
   snapshot(type = "image/png", quality?: number): string {
-    this.controls.update(); this.renderer.shadowMap.needsUpdate = true; this.renderer.render(this.scene, this.camera);
+    this.controls.update(); this.renderer.shadowMap.needsUpdate = true; this.draw();
     return this.renderer.domElement.toDataURL(type, quality);
   }
 }
@@ -365,13 +390,13 @@ function tex(key: TexKey, kind: "diff" | "nor"): THREE.Texture {
   }
   return t;
 }
-const matCache = new Map<string, THREE.MeshLambertMaterial>();
-/** 質感つきの材質（色は質感に掛け合わせる色味）。ほかの部品と明るさをそろえるため Lambert にする */
-function texMat(key: TexKey, color: number, normalScale = 0.8, side: THREE.Side = THREE.FrontSide, gain = 1): THREE.MeshLambertMaterial {
+const matCache = new Map<string, THREE.MeshStandardMaterial>();
+/** 質感つきの材質（色は質感に掛け合わせる色味）。光の当たり方を物理に近く計算する（PBR）。外壁や地面はつやを抑える */
+function texMat(key: TexKey, color: number, normalScale = 0.8, side: THREE.Side = THREE.FrontSide, gain = 1): THREE.MeshStandardMaterial {
   const id = `${key}|${color}|${side}|${gain}`;
   let m = matCache.get(id);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ map: tex(key, "diff"), normalMap: tex(key, "nor"), normalScale: new THREE.Vector2(normalScale, normalScale), side });
+    m = new THREE.MeshStandardMaterial({ map: tex(key, "diff"), normalMap: tex(key, "nor"), normalScale: new THREE.Vector2(normalScale, normalScale), side, roughness: key === "wall_metal" ? 0.55 : 0.92, metalness: 0 });
     // 質感の画像は暗めなので、色味に明るさの倍率を掛けて持ち上げる（1を超えてよい）
     m.color.setHex(color).multiplyScalar(gain);
     matCache.set(id, m);
@@ -392,6 +417,16 @@ function meterUVBox(w: number, h: number, d: number): THREE.BoxGeometry {
 
 export type ExteriorStyle = "wa" | "white" | "black";
 export type ViewSide = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw" | "road";
+// 背景の空：上が淡い青、地平線に向かって白っぽく（画面に固定した縦グラデーション）
+function skyGradient(): THREE.Texture {
+  const c = document.createElement("canvas"); c.width = 2; c.height = 256;
+  const g = c.getContext("2d")!, gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, "#b9d3e6"); gr.addColorStop(0.55, "#e4eef4"); gr.addColorStop(1, "#f4f6f6");
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// 明るさの調整値（ACES と空の環境光を前提にした値）
+const EXPOSURE = 1.05, ENV_INTENSITY = 0.8, HEMI = 0.45, SUN = 3.4;
 /** 北から時計回りの角度 */
 const SIDE_DEG = { n: 0, ne: 45, e: 90, se: 135, s: 180, sw: 225, w: 270, nw: 315 } as const;
 interface Palette { gain: number; roofGain: number; wall: number; apartment: number; store: number; edge: number; roof: number; parapet: number; win: number; frame: number; accent: number; band: boolean; hip: boolean;
@@ -442,9 +477,9 @@ function modelCar(s: { u0: number; v0: number; u1: number; v1: number }, model: 
 // 普通自動車（全長4.4m・全幅1.7m）：車体・客室・窓・タイヤ。車のモデルが読み込めないときの代わり
 function car(s: { u0: number; v0: number; u1: number; v1: number }, color: number): THREE.Group {
   const g = new THREE.Group();
-  const paint = new THREE.MeshLambertMaterial({ color });
-  const glass = new THREE.MeshLambertMaterial({ color: 0x334048 });
-  const tire = new THREE.MeshLambertMaterial({ color: 0x1b1b1b });
+  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.35 });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x334048, roughness: 0.1 });
+  const tire = new THREE.MeshStandardMaterial({ color: 0x1b1b1b });
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.65, 4.4), paint);
   body.position.y = 0.6; body.castShadow = true; g.add(body);
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 2.3), glass);
@@ -497,7 +532,7 @@ function building(b: Box, pal: Palette): THREE.Group {
   }
   if (pal.band) {
     for (let f = 1; f < b.floors; f++) {
-      const hisashi = new THREE.Mesh(new THREE.BoxGeometry(w + 1.0, 0.12, d + 1.0), new THREE.MeshLambertMaterial({ color: pal.roof }));
+      const hisashi = new THREE.Mesh(new THREE.BoxGeometry(w + 1.0, 0.12, d + 1.0), new THREE.MeshStandardMaterial({ color: pal.roof }));
       hisashi.position.set(cx, y0 + f * b.floorHeight, cz); hisashi.castShadow = true; g.add(hisashi);
     }
   } else {
@@ -509,8 +544,8 @@ function building(b: Box, pal: Palette): THREE.Group {
     }
   }
   // 窓（正面と側面）：枠の色を付ける
-  const winMat = new THREE.MeshLambertMaterial({ color: pal.win });
-  const frameMat = new THREE.MeshLambertMaterial({ color: pal.frame });
+  const winMat = new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.4 }); // ガラスは空を映す
+  const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame });
   const addWin = (x: number, y: number, z: number, ww: number, wh: number, side: boolean) => {
     const fr = new THREE.Mesh(new THREE.PlaneGeometry(ww + 0.16, wh + 0.16), frameMat);
     const gl = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), winMat);
@@ -558,11 +593,11 @@ function building(b: Box, pal: Palette): THREE.Group {
     roof.castShadow = true;
     g.add(roof);
   } else {
-    const para = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), new THREE.MeshLambertMaterial({ color: pal.parapet }));
+    const para = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), new THREE.MeshStandardMaterial({ color: pal.parapet }));
     para.position.set(cx, y0 + h + 0.25, cz); para.castShadow = true;
     g.add(para);
     if (pal.band) { // 和風の陸屋根は笠木を濃く
-      const kasagi = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.08, d + 0.2), new THREE.MeshLambertMaterial({ color: pal.roof }));
+      const kasagi = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.08, d + 0.2), new THREE.MeshStandardMaterial({ color: pal.roof }));
       kasagi.position.set(cx, y0 + h + 0.54, cz); g.add(kasagi);
     }
   }
