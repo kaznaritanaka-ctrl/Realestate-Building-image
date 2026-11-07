@@ -365,7 +365,22 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
 .actions { border-top: 1px solid transparent; }
 .viewer { background: #f3f5f6; }
 .steps-nav .todo i { background: #ffe8a3; }
-.keep-btns .btn { white-space: normal; line-height: 1.3; font-size: .8rem; padding: 6px 4px; }
+.keep-btns .btn { white-space: normal; line-height: 1.3; font-size: .8rem; padding: 8px 4px; }
+/* 保存ボタン：枠と色で押せることがすぐ分かるように */
+.keep-btns .btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 64px; background: #fff; color: var(--accent); border: 1.5px solid var(--accent); border-radius: 10px; font-weight: 700;
+  box-shadow: 0 1px 3px rgba(20,60,50,.10); }
+.keep-btns .btn:hover { background: var(--accent-soft); }
+.keep-btns .btn:active { transform: translateY(1px); }
+.keep-btns .btn:disabled { opacity: .55; }
+.keep-btns .btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.keep-btns .btn .l { display: block; white-space: nowrap; }
+.pv-lot { max-width: 1120px; margin: 0 auto 10px; padding: 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.pv-lot label { font-weight: 700; font-size: .9rem; }
+.pv-lot input { flex: 0 1 220px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; }
+.pv-lot small { flex-basis: 100%; color: #5b6b6b; }
+.pv-lot[hidden] { display: none; }
+@media print { .pv-lot { display: none !important; } }
 
 /* 視点のプリセット（左下）。下が道路側 */
 .stage .views { position: absolute; left: 12px; bottom: 12px; z-index: 5; }

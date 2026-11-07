@@ -159,10 +159,10 @@
       <div class="card keep">
         <b>この結果を残す</b>
         <div class="keep-btns">
-          <button type="button" class="btn" id="img-btn">画像で保存</button>
-          <button type="button" class="btn" id="pdf-btn">土地調査PDF（3枚）</button>
-          <button type="button" class="btn" id="mail-btn">自分宛にメール</button>
-          <button type="button" class="btn" id="copy-btn">リンクをコピー</button>
+          <button type="button" class="btn" id="img-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg><span class="l">画像で</span><span class="l">保存</span></button>
+          <button type="button" class="btn" id="pdf-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg><span class="l">土地調査書</span><span class="l">PDF（3枚）</span></button>
+          <button type="button" class="btn" id="mail-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span class="l">自分宛に</span><span class="l">メール</span></button>
+          <button type="button" class="btn" id="copy-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><span class="l">リンクを</span><span class="l">コピー</span></button>
         </div>
         <p class="muted small-hint">メールは端末のメールアプリで下書きを作ります。宛先はご自身で入力してください。リンクには敷地の形と条件が入り、土地の未来図のサーバーには送られません。</p>
       </div>
@@ -222,10 +222,15 @@
 <div id="print-view" class="print-view" role="dialog" aria-modal="true" aria-labelledby="pv-title" hidden>
   <div class="pv-bar">
     <button type="button" class="btn" id="pv-close">閉じる</button>
-    <b id="pv-title">土地調査レポート（A4横・3ページ）</b>
+    <b id="pv-title">土地調査書（A4横・3ページ）</b>
     <button type="button" class="btn primary" id="pv-print">PDFで保存</button>
   </div>
   <p class="pv-hint">「PDFで保存」を押すと印刷の画面が開きます。パソコン・Androidは送信先で「PDFとして保存」、iPhoneは印刷の画面の共有ボタンから「ファイルに保存」を選んでください。</p>
+  <div class="pv-lot" id="pv-lot-row">
+    <label for="pv-lot">地番（任意）</label>
+    <input id="pv-lot" type="text" maxlength="40" placeholder="例：123番4" autocomplete="off" inputmode="text">
+    <small>書き込んだ地番は、この端末の中でPDFに入れるだけです。送信も保存もしません。</small>
+  </div>
   <div id="print-sheet" class="print-sheet"></div>
 </div>
 <div id="img-view" class="img-view" role="dialog" aria-modal="true" aria-labelledby="iv-title" hidden>

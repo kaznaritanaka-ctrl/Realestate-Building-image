@@ -54,3 +54,11 @@ test("追加データの取込とXSSエスケープ、標高の表示", () => {
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("商用利用条件"));
 });
+
+test("所在は町字までの目安を表示し、地番欄を用意する（文字列はエスケープ）", () => {
+  const html = buildSiteReport({ ...input, info: { available: true, info: {}, address: { pref: "大阪府", city: "大阪市北区", town: "梅田<一丁目>" } } });
+  assert.ok(html.includes("大阪府大阪市北区梅田&lt;一丁目&gt; 付近"));
+  assert.ok(html.includes("data-lot"));
+  const sample = buildSiteReport({ ...input, isSample: true });
+  assert.ok(sample.includes("サンプル敷地") && !sample.includes("data-lot"));
+});

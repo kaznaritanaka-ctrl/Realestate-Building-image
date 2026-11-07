@@ -366,6 +366,8 @@ $("#pdf-btn").addEventListener("click", async () => {
       styleName: ({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"],
       center: state.points.length ? centroid() : undefined,
     });
+    ($("#pv-lot-row") as HTMLElement).hidden = state.sample;
+    applyLot();
     track("save_result", { via: "pdf" });
     $("#print-view").hidden = false;
     $("#print-view").scrollTop = 0;
@@ -378,6 +380,12 @@ $("#pdf-btn").addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+// 地番はプレビューの中で書き込むだけ（状態・共有リンク・送信のどこにも入れない）
+function applyLot() {
+  const v = ($("#pv-lot") as HTMLInputElement).value.trim();
+  document.querySelectorAll<HTMLElement>("#print-sheet [data-lot]").forEach(el => { el.textContent = v || "（未記入）"; });
+}
+$("#pv-lot").addEventListener("input", applyLot);
 // 印刷はボタンを押した直後に呼ぶ（iPhoneのSafariは、間に処理を挟むと止める）
 $("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
 

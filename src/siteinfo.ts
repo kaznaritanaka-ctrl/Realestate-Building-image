@@ -1,7 +1,12 @@
 // 「この土地の参考情報」：不動産情報ライブラリの各レイヤーを、地点ごとに読みやすく整える
 type Hit = { d?: number; props: Record<string, unknown> };
 type LayerRes = { label: string; found?: number; hits?: Hit[]; error?: string };
-export type SiteInfo = { available: boolean; info?: Record<string, LayerRes>; elevation?: { value: number; hsrc: string } | null };
+export type SiteInfo = { available: boolean; info?: Record<string, LayerRes>; elevation?: { value: number; hsrc: string } | null; address?: { pref: string; city: string; town: string } | null };
+/** 所在地の参考表示（「〇〇県〇〇市〇〇町 付近」）。分からなければ空文字 */
+export function addressText(si: SiteInfo | null | undefined): string {
+  const a = si?.address;
+  return a ? `${a.pref}${a.city}${a.town}` : "";
+}
 
 const cache = new Map<string, Promise<SiteInfo>>();
 
@@ -59,6 +64,8 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
   if (si === null) return `<b>この土地の参考情報</b><p class="muted">調べています…</p>`;
   if (!si.available) return `<b>この土地の参考情報</b><p class="muted">この地点の情報は取得できませんでした。</p>`;
   const rows: string[] = [];
+  const addr = addressText(si);
+  if (addr) rows.push(row("所在（参考）", `${esc(addr)} 付近<small>座標から求めた町名までの目安です（地番は分かりません）。</small>`));
 
   // 都市計画
   const ac = areaClass(si);

@@ -43,12 +43,16 @@ export function buildSiteReport({ result, info, images, isSample, preparedAt, st
   const layers = info?.info ?? {};
   const layer = (id: string): Layer | undefined => layers[id];
   const hit = (id: string): Record<string, unknown> => getHits(layer(id))[0]?.props ?? {};
-  const sourceInfo = isSample ? "サンプル敷地（架空）" : "利用者指定の敷地";
+  const a = info?.address;
+  // 所在は町字までの目安。地番は利用者がプレビュー画面で書き込める（data-lot。端末の外には出さない）
+  const sourceInfo = isSample ? "サンプル敷地（架空）"
+    : (a ? html(a.pref + a.city + a.town) + " 付近" : "利用者指定の敷地（所在地は未取得）") +
+      '<br><small class="rp-lot">地番：<span data-lot>（未記入）</span></small>';
   const centerText = isSample || !center ? "非表示" : center[1].toFixed(5) + ", " + center[0].toFixed(5) + "（参照点）";
   const dateText = preparedAt.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const zoneStatus = ({ confirmed: "確認済み", public: "公的資料・参考", reference: "代表値", guess: "推定", user: "利用者入力", unknown: "未確認" } as Record<string, string>);
   const landTable = [
-    row("対象", sourceInfo), row("敷地面積", '約' + s.area + '㎡（約' + (s.area / 3.30579).toFixed(1) + '坪）', "利用者指定"),
+    row("所在", sourceInfo, isSample ? "" : "座標から求めた目安"), row("敷地面積", '約' + s.area + '㎡（約' + (s.area / 3.30579).toFixed(1) + '坪）', "利用者指定"),
     row("参照地点（緯度・経度）", html(centerText), "敷地中心目安"),
     row("用途地域", html(s.zone.label), zoneStatus[result.certainty.zone] ?? "参考"),
     row("指定建ぺい率 / 容積率", s.bcr + "% / " + s.far + "%", zoneStatus[result.certainty.bcrFar] ?? "参考"),

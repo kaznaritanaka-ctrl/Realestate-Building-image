@@ -239,13 +239,58 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     }
     try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
   };
-  const [info, elevation] = await Promise.all([
+  const [info, elevation, address] = await Promise.all([
     siteInfo(lat, lng, fetchJson, only),
     // 標高は単一点の地形参考情報。リクエストごとに上流へ送らず約10m単位で1日キャッシュする。
     only && !only.includes("elevation") ? Promise.resolve(null) : gsiElevation(lat, lng, ctx),
+    only && !only.includes("address") ? Promise.resolve(null) : gsiAddress(lat, lng, ctx),
   ]);
   console.log(JSON.stringify({ evt: "site-info", apis: Object.keys(info).length }));
-  return json({ available: true, info, elevation, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
+  return json({ available: true, info, elevation, address, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
+}
+
+// 所在地の参考表示（都道府県・市区町村・町字まで。地番は分からない）。
+// 国土地理院の逆ジオコーダで町字と市区町村コードを求め、市区町村名は地理院地図の一覧（muni.js）から引く。
+// 座標は約10m単位に丸めて共有キャッシュする。誰の照会かは記録しない
+let muniTable: Map<string, [string, string]> | null = null;
+async function muniName(code: string, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<[string, string] | null> {
+  if (!muniTable) {
+    const k = new Request("https://cache.internal/gsi-muni-v1");
+    const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
+    let r = await cache.match(k);
+    if (!r) {
+      const up = await fetch("https://maps.gsi.go.jp/js/muni.js", { signal: AbortSignal.timeout(4500) });
+      if (!up.ok) return null;
+      r = new Response(await up.text(), { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=2592000" } });
+      ctx.waitUntil(cache.put(k, r.clone()));
+    }
+    const t = new Map<string, [string, string]>();
+    for (const m of (await r.text()).matchAll(/MUNI_ARRAY\["(\d+)"\]\s*=\s*'\d+,([^,]+),\d+,([^']+)'/g)) t.set(m[1], [m[2], m[3].replace(/[\s　]+/g, "")]);
+    if (!t.size) return null;
+    muniTable = t;
+  }
+  return muniTable.get(code.replace(/^0+/, "")) ?? null;
+}
+async function gsiAddress(lat: number, lng: number, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<{ pref: string; city: string; town: string } | null> {
+  const y = Math.round(lat * 1e4) / 1e4, x = Math.round(lng * 1e4) / 1e4;
+  const k = new Request(`https://cache.internal/gsi-rgeo/${x}/${y}`);
+  const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
+  try {
+    let r = await cache.match(k);
+    if (!r) {
+      const up = await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${y}&lon=${x}`, { signal: AbortSignal.timeout(4500) });
+      if (!up.ok) return null;
+      r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=2592000" } });
+      ctx.waitUntil(cache.put(k, r.clone()));
+    }
+    const d = await r.json() as { results?: { muniCd?: string; lv01Nm?: string } };
+    const code = d.results?.muniCd;
+    if (!code || !/^\d{4,5}$/.test(code)) return null;
+    const name = await muniName(code, ctx);
+    if (!name) return null;
+    const town = typeof d.results?.lv01Nm === "string" && d.results.lv01Nm !== "－" ? d.results.lv01Nm.slice(0, 40) : "";
+    return { pref: name[0].slice(0, 8), city: name[1].slice(0, 20), town };
+  } catch { return null; }
 }
 
 // 国土地理院の試験公開標高API。過度な利用を避けるため座標は4桁に丸めて共有キャッシュ。
