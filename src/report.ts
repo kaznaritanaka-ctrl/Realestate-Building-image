@@ -11,6 +11,8 @@ export interface ReportInput {
   preparedAt: Date;
   styleName: string;
   center?: [number, number]; // 経度・緯度（ユーザーが明示的にPDFを保存するときだけ印刷）
+  mapImage?: string | null;   // 位置図（地理院タイルを端末内でつないだ画像）
+  sitePlan?: { poly: [number, number][]; edges: string[] } | null; // 敷地図用：東・北方向のメートル座標と各辺の道路幅
 }
 type Hit = { props: Record<string, unknown>; d?: number };
 type Layer = { found?: number; hits?: Hit[]; error?: string };
@@ -38,7 +40,7 @@ function renderPlan(p: Plan, image: string | undefined): string {
     '<div class="rp-card-meta"><span>' + html(p.subtitle) + '</span><span>概算工事費 ' + html(money(m.costMin)) + '〜' + html(money(m.costMax)) + '</span></div></section>';
 }
 
-export function buildSiteReport({ result, info, images, isSample, preparedAt, styleName, center }: ReportInput): string {
+export function buildSiteReport({ result, info, images, isSample, preparedAt, styleName, center, mapImage, sitePlan }: ReportInput): string {
   const s = result.site;
   const layers = info?.info ?? {};
   const layer = (id: string): Layer | undefined => layers[id];
@@ -59,9 +61,15 @@ export function buildSiteReport({ result, info, images, isSample, preparedAt, st
     row("前面道路幅員", s.roadWidth == null ? "未確認" : "約" + s.roadWidth + "mとして計算", zoneStatus[result.certainty.road] ?? "参考"),
     row("建物外観", html(styleName), "選択した表示スタイル"),
   ].join("");
-  const page1 = '<div class="rp-four">' +
+  // 相談メモ：プレビュー画面で選んだ内容を data-memo に差し込む（端末の外には出さない）
+  const memo = MEMO_GROUPS.map(g => row(g.label, '<span data-memo="' + g.key + '">（未選択）</span>')).join("");
+  const page1 = '<div class="rp-p1">' +
     '<section class="rp-card rp-overview"><h3>対象土地の概要</h3><table class="rp-table">' + landTable + '</table>' +
+    (isSample ? "" : '<h3 class="rp-sub">相談メモ</h3><table class="rp-table rp-memo">' + memo + '</table>') +
     '<p class="rp-fine">敷地形状は利用者の概略入力です。土地境界・測量結果や実際の建築可能性を確定するものではありません。</p></section>' +
+    '<section class="rp-card rp-map"><h3>位置図</h3>' + (mapImage ? '<img src="' + html(mapImage) + '" alt="位置図">' : '<p class="rp-missing">' + (isSample ? "サンプルのため位置図はありません" : "位置図を取得できませんでした") + '</p>') +
+    '<p class="rp-fine">赤枠が入力した敷地の目安です。出典：国土地理院 地理院タイル</p></section>' +
+    '<section class="rp-card rp-siteplan"><h3>敷地図（概略）</h3>' + (sitePlan && sitePlan.poly.length >= 3 ? sitePlanSvg(sitePlan.poly, sitePlan.edges) : '<p class="rp-missing">敷地図を作れませんでした</p>') + '</section>' +
     result.plans.map((p,i) => renderPlan(p, images[i])).join("") + '</div>';
 
   const fire = hit("XKT014");
@@ -127,4 +135,57 @@ export function buildSiteReport({ result, info, images, isSample, preparedAt, st
     reportPage(2, "都市計画・建築関連の参考情報", page2, foot) +
     reportPage(3, "災害・地形情報と確認事項", page3, foot) +
     '</div>';
+}
+
+/** 相談メモの選択肢（すべて選ぶだけ。自由記入はしない） */
+export const MEMO_GROUPS: { key: string; label: string; multi: boolean; options: string[] }[] = [
+  { key: "purpose", label: "相談したいこと", multi: true, options: ["売却", "賃貸・土地活用", "自宅の建築", "相続・名義", "相場を知りたい"] },
+  { key: "state", label: "土地の今の状態", multi: false, options: ["更地", "古家あり", "駐車場", "農地", "その他"] },
+  { key: "owner", label: "名義", multi: false, options: ["本人", "家族", "共有", "相続手続き中"] },
+  { key: "when", label: "希望の時期", multi: false, options: ["3か月以内", "半年以内", "1年以内", "未定"] },
+];
+
+const WIDTH_LABEL: Record<string, string> = { lt4: "4m未満", "4to6": "4〜6m", "6to12": "6〜12m", gte12: "12m以上" };
+const WIDTH_DRAW: Record<string, number> = { lt4: 3.5, "4to6": 5, "6to12": 8, gte12: 10 };
+/** 敷地図（北が上）。辺の長さ・道路の位置と幅・方位・縮尺 */
+export function sitePlanSvg(poly: [number, number][], edges: string[]): string {
+  const n = poly.length;
+  let area2 = 0; for (let i = 0; i < n; i++) { const [a, b] = poly[i], [c, d] = poly[(i + 1) % n]; area2 += a * d - c * b; }
+  const out = area2 > 0 ? 1 : -1; // 左回りなら辺の右側が外側
+  const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
+  const roadMax = Math.max(0, ...edges.map(e => WIDTH_DRAW[e] ?? 0));
+  const pad = Math.max(roadMax + 2.5, 0.14 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)), 4);
+  const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad, minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+  const W = maxX - minX, H = maxY - minY, f = (v: number) => v.toFixed(2);
+  const X = (x: number) => x - minX, Y = (y: number) => maxY - y; // SVG は下向きが正
+  const fs = Math.max(W, H) / 26;
+  let roads = "", labels = "";
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % n];
+    const L = Math.hypot(x2 - x1, y2 - y1); if (L < 0.01) continue;
+    const tx = (x2 - x1) / L, ty = (y2 - y1) / L, nx = ty * out, ny = -tx * out; // 外向き
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const w = edges[i] && edges[i] !== "none" ? edges[i] : "";
+    let ang = Math.atan2(-(y2 - y1), x2 - x1) * 180 / Math.PI; if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
+    if (w) {
+      const d = WIDTH_DRAW[w] ?? 5;
+      const q = [[x1 - tx * 4, y1 - ty * 4], [x2 + tx * 4, y2 + ty * 4], [x2 + tx * 4 + nx * d, y2 + ty * 4 + ny * d], [x1 - tx * 4 + nx * d, y1 - ty * 4 + ny * d]];
+      roads += '<polygon points="' + q.map(([x, y]) => f(X(x)) + "," + f(Y(y))).join(" ") + '" fill="#d9dee0" stroke="#b9c2c5" stroke-width="' + f(fs * 0.06) + '"/>';
+      const lx = mx + nx * d / 2, ly = my + ny * d / 2;
+      labels += '<text x="' + f(X(lx)) + '" y="' + f(Y(ly)) + '" font-size="' + f(fs * 0.85) + '" fill="#40545a" text-anchor="middle" dominant-baseline="middle" transform="rotate(' + f(ang) + ' ' + f(X(lx)) + ' ' + f(Y(ly)) + ')">道路 幅' + (WIDTH_LABEL[w] ?? "") + '</text>';
+    }
+    // 辺の長さ（敷地の内側に書く）
+    const ix = mx - nx * fs * 0.9, iy = my - ny * fs * 0.9;
+    labels += '<text x="' + f(X(ix)) + '" y="' + f(Y(iy)) + '" font-size="' + f(fs) + '" fill="#1f3339" font-weight="700" text-anchor="middle" dominant-baseline="middle" transform="rotate(' + f(ang) + ' ' + f(X(ix)) + ' ' + f(Y(iy)) + ')">' + L.toFixed(1) + 'm</text>';
+  }
+  const pts = poly.map(([x, y]) => f(X(x)) + "," + f(Y(y))).join(" ");
+  // 縮尺（5m か 10m）と方位
+  const bar = Math.max(W, H) > 60 ? 20 : Math.max(W, H) > 30 ? 10 : 5;
+  const bx = fs, by = fs * 2; // 縮尺は左上（道路の帯と重ならないように）
+  const scale = '<g stroke="#1f3339" stroke-width="' + f(fs * 0.12) + '"><line x1="' + f(bx) + '" y1="' + f(by) + '" x2="' + f(bx + bar) + '" y2="' + f(by) + '"/><line x1="' + f(bx) + '" y1="' + f(by - fs * 0.4) + '" x2="' + f(bx) + '" y2="' + f(by + fs * 0.1) + '"/><line x1="' + f(bx + bar) + '" y1="' + f(by - fs * 0.4) + '" x2="' + f(bx + bar) + '" y2="' + f(by + fs * 0.1) + '"/></g>' +
+    '<text x="' + f(bx + bar / 2) + '" y="' + f(by - fs * 0.6) + '" font-size="' + f(fs * 0.8) + '" fill="#1f3339" text-anchor="middle">' + bar + 'm</text>';
+  const ax = W - fs * 1.6, ay = fs * 1.2;
+  const north = '<g fill="#1f3339"><polygon points="' + f(ax) + ',' + f(ay) + ' ' + f(ax - fs * 0.5) + ',' + f(ay + fs * 1.6) + ' ' + f(ax) + ',' + f(ay + fs * 1.2) + ' ' + f(ax + fs * 0.5) + ',' + f(ay + fs * 1.6) + '"/><text x="' + f(ax) + '" y="' + f(ay + fs * 2.7) + '" font-size="' + f(fs * 0.9) + '" text-anchor="middle" font-weight="700">N</text></g>';
+  return '<svg class="rp-plan-svg" viewBox="0 0 ' + f(W) + ' ' + f(H) + '" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="敷地図">' + roads +
+    '<polygon points="' + pts + '" fill="#eaf4f0" stroke="#2d756c" stroke-width="' + f(fs * 0.14) + '" stroke-linejoin="round"/>' + labels + scale + north + '</svg>';
 }

@@ -62,3 +62,9 @@ test("所在は町字までの目安を表示し、地番欄を用意する（�
   const sample = buildSiteReport({ ...input, isSample: true });
   assert.ok(sample.includes("サンプル敷地") && !sample.includes("data-lot"));
 });
+
+test("敷地図：辺の長さ・道路幅・方位を描き、相談メモの差し込み先を用意する", () => {
+  const html = buildSiteReport({ ...input, sitePlan: { poly: [[0,0],[12,0],[12,20],[0,20]], edges: ["4to6","none","none","none"] } });
+  assert.ok(html.includes("<svg") && html.includes("12.0m") && html.includes("20.0m") && html.includes("道路 幅4〜6m") && html.includes(">N<"));
+  for (const k of ["purpose","state","owner","when"]) assert.ok(html.includes(`data-memo="${k}"`), k);
+});

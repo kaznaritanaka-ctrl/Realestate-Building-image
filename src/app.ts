@@ -6,7 +6,7 @@ import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
-import { buildSiteReport } from "./report.ts";
+import { buildSiteReport, MEMO_GROUPS } from "./report.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -365,9 +365,12 @@ $("#pdf-btn").addEventListener("click", async () => {
       preparedAt: new Date(),
       styleName: ({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"],
       center: state.points.length ? centroid() : undefined,
+      mapImage: state.sample ? null : await Promise.race([locationMap(state.points).catch(() => null), new Promise<null>(r => setTimeout(() => r(null), 6000))]),
+      sitePlan: { poly: localPolygon() as [number, number][], edges: state.edges },
     });
     ($("#pv-lot-row") as HTMLElement).hidden = state.sample;
-    applyLot();
+    ($("#pv-memo") as HTMLElement).hidden = state.sample;
+    applyLot(); applyMemo();
     track("save_result", { via: "pdf" });
     $("#print-view").hidden = false;
     $("#print-view").scrollTop = 0;
@@ -386,6 +389,73 @@ function applyLot() {
   document.querySelectorAll<HTMLElement>("#print-sheet [data-lot]").forEach(el => { el.textContent = v || "（未記入）"; });
 }
 $("#pv-lot").addEventListener("input", applyLot);
+
+// 相談メモ：選ぶだけ。選んだ内容は PDF の data-memo に入れるだけで、状態・共有リンク・送信には入れない
+const memoPick: Record<string, Set<string>> = {};
+{
+  const box = $("#pv-memo");
+  for (const g of MEMO_GROUPS) {
+    memoPick[g.key] = new Set();
+    const fs = document.createElement("fieldset"); fs.className = "pv-memo-g";
+    const lg = document.createElement("legend"); lg.textContent = g.label;
+    if (g.multi) { const sm = document.createElement("small"); sm.textContent = "（いくつでも）"; lg.appendChild(sm); }
+    fs.appendChild(lg);
+    for (const o of g.options) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "memo-chip"; b.textContent = o;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => {
+        const set = memoPick[g.key];
+        if (set.has(o)) set.delete(o); else { if (!g.multi) set.clear(); set.add(o); }
+        fs.querySelectorAll<HTMLButtonElement>(".memo-chip").forEach(c => c.setAttribute("aria-pressed", String(set.has(c.textContent!))));
+        applyMemo();
+      });
+      fs.appendChild(b);
+    }
+    box.appendChild(fs);
+  }
+}
+function applyMemo() {
+  for (const g of MEMO_GROUPS) {
+    const v = [...memoPick[g.key]].join("・");
+    document.querySelectorAll<HTMLElement>(`#print-sheet [data-memo="${g.key}"]`).forEach(el => { el.textContent = v || "（未選択）"; });
+  }
+}
+
+// 位置図：地理院タイル（標準地図）を端末の中でつなぎ、敷地を赤枠で示す。外部へは何も送らない（タイルの取得のみ）
+async function locationMap(points: Vec2[], W = 960, H = 640, z = 18): Promise<string | null> {
+  if (points.length < 3) return null;
+  const n = 2 ** z;
+  const px = ([lng, lat]: Vec2): Vec2 => {
+    const r = (lat * Math.PI) / 180;
+    return [((lng + 180) / 360) * n * 256, ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n * 256];
+  };
+  const P = points.map(px);
+  const cx = P.reduce((s, p) => s + p[0], 0) / P.length, cy = P.reduce((s, p) => s + p[1], 0) / P.length;
+  const x0 = cx - W / 2, y0 = cy - H / 2;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const g = cv.getContext("2d")!;
+  g.fillStyle = "#eef1f2"; g.fillRect(0, 0, W, H);
+  const tiles: Promise<void>[] = [];
+  for (let tx = Math.floor(x0 / 256); tx <= Math.floor((x0 + W) / 256); tx++) {
+    for (let ty = Math.floor(y0 / 256); ty <= Math.floor((y0 + H) / 256); ty++) {
+      tiles.push(new Promise<void>((ok, ng) => {
+        const im = new Image(); im.crossOrigin = "anonymous";
+        im.onload = () => { g.drawImage(im, tx * 256 - x0, ty * 256 - y0); ok(); };
+        im.onerror = () => ng(new Error("tile"));
+        im.src = `https://cyberjapandata.gsi.go.jp/xyz/std/${z}/${tx}/${ty}.png`;
+      }));
+    }
+  }
+  await Promise.all(tiles);
+  // 敷地：赤い枠と薄い塗り、中心に印
+  g.beginPath(); P.forEach(([x, y], i) => (i ? g.lineTo(x - x0, y - y0) : g.moveTo(x - x0, y - y0))); g.closePath();
+  g.fillStyle = "rgba(220,40,40,.28)"; g.fill(); g.lineWidth = 3; g.strokeStyle = "#d42a2a"; g.stroke();
+  g.beginPath(); g.arc(W / 2, H / 2, 26, 0, Math.PI * 2); g.lineWidth = 3; g.strokeStyle = "rgba(212,42,42,.85)"; g.stroke();
+  g.font = "600 18px system-ui, sans-serif"; g.textAlign = "right"; g.textBaseline = "bottom";
+  g.fillStyle = "rgba(255,255,255,.85)"; g.fillRect(W - 128, H - 28, 128, 28);
+  g.fillStyle = "#333"; g.fillText("地理院タイル", W - 8, H - 5);
+  return cv.toDataURL("image/jpeg", 0.85);
+}
 // 印刷はボタンを押した直後に呼ぶ（iPhoneのSafariは、間に処理を挟むと止める）
 $("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
 
