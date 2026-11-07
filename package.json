@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test --experimental-strip-types engine/*.test.ts"
+    "test": "node --test --experimental-strip-types engine/*.test.ts src/*.test.ts worker/*.test.ts"
   },
   "devDependencies": {
     "@types/three": "^0.187.0",
