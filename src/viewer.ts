@@ -97,7 +97,8 @@ export class Viewer {
     this.scene.add(sun, this.siteGroup, this.planGroup, this.extGroup);
     // パソコン（マウス操作）だけ、隅や接地面に柔らかい陰（GTAO）を足す。スマホは重いので使わない
     if (!coarse && !/[?&]noao\b/.test(location.search)) {
-      const c = new EffectComposer(this.renderer);
+      // 陰影の合成を通すと縁のギザギザ消し（MSAA）が効かなくなるので、合成用の画面にも4倍の MSAA を付ける
+      const c = new EffectComposer(this.renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
       c.addPass(new RenderPass(this.scene, this.camera));
       const ao = new GTAOPass(this.scene, this.camera, 600, 400);
       ao.updateGtaoMaterial({ radius: 2, distanceExponent: 1, thickness: 2, scale: 1, samples: 16 });
@@ -372,7 +373,7 @@ export class Viewer {
       if (plan.use !== "other" || i % 2 === 0) this.planGroup.add(carModels?.length ? modelCar(s, carModels[i % carModels.length]) : car(s, CAR_COLORS[i % CAR_COLORS.length]));
     });
     clear(this.extGroup);
-    this.extGroup.add(exterior(this.sitePoly, this.roadsUV, this.planGroup));
+    this.extGroup.add(exterior(this.sitePoly, this.roadsUV));
     // 車のモデルがまだなら読み込んで、届いたら置き直す
     if (plan.stalls.length && !carModels) loadCars().then(() => { if (this.lastPlan?.plan === plan && carModels?.length) this.setPlan(plan, rotation); });
   }
@@ -599,7 +600,7 @@ function car(s: { u0: number; v0: number; u1: number; v1: number }, color: numbe
   return g;
 }
 
-// ---- 外構：道路以外の境界にブロック塀、空いているところに木と低木 ----
+// ---- 外構：道路以外の境界にブロック塀 ----
 function inPoly(P: [number, number][], u: number, v: number): boolean {
   let c = false;
   for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
@@ -608,18 +609,13 @@ function inPoly(P: [number, number][], u: number, v: number): boolean {
   }
   return c;
 }
-function exterior(P: [number, number][], roads: [number, number][][], plan: THREE.Object3D): THREE.Group {
+function exterior(P: [number, number][], roads: [number, number][][]): THREE.Group {
   const g = new THREE.Group();
   if (P.length < 3) return g;
-  // 建物・駐車区画・車のある場所（真上から見た範囲）。ここには何も置かない
-  plan.updateMatrixWorld(true);
-  const taken = plan.children.map(c => new THREE.Box3().setFromObject(c)).filter(b => !b.isEmpty());
-  const free = (u: number, v: number, r: number) => inPoly(P, u, v) && !taken.some(b => u > b.min.x - r && u < b.max.x + r && -v > b.min.z - r && -v < b.max.z + r);
   let area2 = 0; for (let i = 0; i < P.length; i++) { const [a, b2] = P[i], [c, d] = P[(i + 1) % P.length]; area2 += a * d - c * b2; }
   const inward = area2 > 0 ? 1 : -1; // 左回りなら辺の左側が内側
-  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
-  const wallGeo: THREE.BufferGeometry[] = [], spots: [number, number][] = [], corners: [number, number][] = [];
+  const wallGeo: THREE.BufferGeometry[] = [];
   for (let i = 0; i < P.length; i++) {
     const [u0, v0] = P[i], [u1, v1] = P[(i + 1) % P.length];
     const L = Math.hypot(u1 - u0, v1 - v0); if (L < 0.5) continue;
@@ -632,49 +628,11 @@ function exterior(P: [number, number][], roads: [number, number][][], plan: THRE
       geo.rotateY(Math.atan2(tv, tu)).translate(mu + nu * 0.08, 0.4, -(mv + nv * 0.08));
       wallGeo.push(geo);
     }
-    // 低木の候補：塀ぎわに2.5mおき（道路ぎわには置かない）
-    if (!isRoad) for (let t = 1.2; t < L - 1; t += 2.5) spots.push([u0 + tu * t + nu * 0.7, v0 + tv * t + nv * 0.7]);
-    // 木の候補：道路に面していない角（建物を隠さないよう、木は角だけ・少なめ）
-    const prevRoad = roads.some(R => { const [pu, pv] = P[(i + P.length - 1) % P.length]; const q = [(pu + u0) / 2, (pv + v0) / 2]; const a = Math.hypot(u0 - pu, v0 - pv) || 1; return inPoly(R, q[0] - (-(v0 - pv) / a * inward), q[1] - ((u0 - pu) / a * inward)); });
-    if (!isRoad && !prevRoad) {
-      const [pu, pv] = P[(i + P.length - 1) % P.length], a = Math.hypot(u0 - pu, v0 - pv) || 1;
-      const qu = (pu - u0) / a, qv = (pv - v0) / a; // 角から前の辺の向き
-      corners.push([u0 + (tu + qu) * 1.4, v0 + (tv + qv) * 1.4]);
-    }
   }
   if (wallGeo.length) {
     const wall = new THREE.Mesh(mergeGeometries(wallGeo.map(x => x.toNonIndexed())), texMat("ground_concrete", 0xdad8d2, 0.6, THREE.FrontSide, 1.45));
     wall.castShadow = true; wall.receiveShadow = true; g.add(wall);
   }
-  // 木：幹と、色の違う葉の固まり2〜3個（低いポリゴンで軽く）
-  const trunk: THREE.BufferGeometry[] = [], leaves: THREE.BufferGeometry[] = [], shrubs: THREE.BufferGeometry[] = [];
-  const greens = [0x5f8f4a, 0x6f9c52, 0x4f7f43, 0x7aa35a].map(c => new THREE.Color(c));
-  const tint = (geo: THREE.BufferGeometry, c: THREE.Color) => {
-    const n = geo.attributes.position.count, a = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { const k = 0.9 + rnd() * 0.2; a[i * 3] = c.r * k; a[i * 3 + 1] = c.g * k; a[i * 3 + 2] = c.b * k; }
-    geo.setAttribute("color", new THREE.BufferAttribute(a, 3)); return geo;
-  };
-  let trees = 0, bushes = 0;
-  for (const [u, v] of corners) {
-    if (trees >= 3 || !free(u, v, 1.0)) continue;
-    const H = 2.6 + rnd() * 1.2, x = u, z = -v;
-    trunk.push(new THREE.CylinderGeometry(0.07, 0.11, H * 0.55, 6).translate(x, H * 0.275, z).toNonIndexed());
-    const k = 2 + Math.floor(rnd() * 2);
-    for (let j = 0; j < k; j++) {
-      const r = 0.55 + rnd() * 0.4;
-      leaves.push(tint(new THREE.IcosahedronGeometry(r, 1).translate(x + (rnd() - 0.5) * 0.7, H * 0.62 + j * 0.45 + rnd() * 0.2, z + (rnd() - 0.5) * 0.7), greens[Math.floor(rnd() * 4)]));
-    }
-    trees++;
-  }
-  for (const [u, v] of spots) {
-    if (bushes >= 28 || !free(u, v, 0.4)) continue;
-    const r = 0.3 + rnd() * 0.2;
-    shrubs.push(tint(new THREE.IcosahedronGeometry(r, 1).scale(1.4, 0.8, 1.4).translate(u, r * 0.7, -v), greens[Math.floor(rnd() * 4)]));
-    bushes++;
-  }
-  const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
-  if (trunk.length) { const m = new THREE.Mesh(mergeGeometries(trunk), new THREE.MeshStandardMaterial({ color: 0x6b5442, roughness: 0.9 })); m.castShadow = true; g.add(m); }
-  for (const list of [leaves, shrubs]) if (list.length) { const m = new THREE.Mesh(mergeGeometries(list.map(x => x.index ? x.toNonIndexed() : x)), leafMat); m.castShadow = true; m.receiveShadow = true; g.add(m); }
   return g;
 }
 
