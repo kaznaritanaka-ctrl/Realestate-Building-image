@@ -1,7 +1,7 @@
 // 「この土地の参考情報」：不動産情報ライブラリの各レイヤーを、地点ごとに読みやすく整える
 type Hit = { d?: number; props: Record<string, unknown> };
 type LayerRes = { label: string; found?: number; hits?: Hit[]; error?: string };
-export type SiteInfo = { available: boolean; info?: Record<string, LayerRes> };
+export type SiteInfo = { available: boolean; info?: Record<string, LayerRes>; elevation?: { value: number; hsrc: string } | null };
 
 const cache = new Map<string, Promise<SiteInfo>>();
 
@@ -72,6 +72,8 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
     const p = zone.props;
     rows.push(row("用途地域", `${esc(str(p.use_area_ja))}（建ぺい率 ${esc(str(p.u_building_coverage_ratio_ja || p.building_coverage_ratio))}・容積率 ${esc(str(p.u_floor_area_ratio_ja || p.floor_area_ratio))}）`.replace(/（建ぺい率 ・容積率 ）$/, "")));
   } else if (ok(layer(si, "XKT002"))) rows.push(row("用途地域", none));
+  const loc = layer(si, "XKT003");
+  if (ok(loc)) rows.push(row("立地適正化計画", hits(loc).length ? esc(str(hits(loc)[0].props.kubun_name_ja ?? hits(loc)[0].props.area_classification_ja)) : none, hits(loc).length > 0));
   const fire = layer(si, "XKT014");
   rows.push(row("防火・準防火地域", !ok(fire) ? na : hits(fire).length ? esc(str(hits(fire)[0].props.fire_prevention_ja)) + "<small>建物の構造（耐火・準耐火）に制限があり、工事費に影響します。</small>" : none, hits(fire).length > 0));
   const dp = layer(si, "XKT023");
@@ -91,14 +93,29 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
     const rivers = [...new Set(hits(fl).map(h => str(h.props.A31a_202)).filter(Boolean))].slice(0, 3);
     rows.push(row("洪水（想定最大規模）", `浸水想定区域内${max ? `：深さ ${FLOOD_RANK[max] ?? `ランク${max}`}` : ""}${rivers.length ? `（${rivers.map(esc).join("・")}）` : ""}`, max >= 3));
   }
+  const tide = layer(si, "XKT027");
+  if (ok(tide)) rows.push(row("高潮浸水想定", hits(tide).length ? esc(str(hits(tide)[0].props.A49_003 ?? "区域内（深さ不明）")) : none, hits(tide).length > 0));
   const ls = layer(si, "XKT029");
-  rows.push(row("土砂災害警戒区域", !ok(ls) ? na : hits(ls).length ? generic(ls) : none, hits(ls).length > 0));
+  // このAPIには一部自治体で非商用制限があり、現状は表示を保留している。
+  rows.push(row("土砂災害警戒区域", ls?.error === "license_review_required"
+    ? "提供保留（商用利用条件の確認中）"
+    : !ok(ls) ? na : hits(ls).length ? generic(ls) : none, hits(ls).length > 0));
+  const history = layer(si, "XST001");
+  if (ok(history)) {
+    const items = hits(history).slice(0, 2).map(h => {
+      const p = h.props;
+      return esc(str(p.disaster_name_ja || "災害")) + (p.disaster_date ? "（" + esc(str(p.disaster_date)) + "）" : "");
+    });
+    rows.push(row("周辺の災害履歴（収録分のみ）", items.length ? items.join(" / ") + "<small>未収録の災害もあります。150m以内の近接情報を含みます。</small>" : none, items.length > 0));
+  }
   const fill = layer(si, "XKT020");
   if (ok(fill)) rows.push(row("大規模盛土造成地", hits(fill).length ? "区域内" : none, hits(fill).length > 0));
   const lq = hits(layer(si, "XKT025"))[0];
   if (lq) rows.push(row("液状化の発生傾向", `${esc(str(lq.props.note))}${lq.props.topographic_classification_name_ja ? `<small>地形区分：${esc(str(lq.props.topographic_classification_name_ja))}</small>` : ""}`));
 
   // 周辺
+  if (si.elevation && Number.isFinite(si.elevation.value)) rows.push(row("参照地点の標高", si.elevation.value.toFixed(1) + "m<small>" + esc(si.elevation.hsrc) + "。約10m単位の参照地点であり、敷地内の高低差は分かりません。</small>"));
+
   const lp = hits(layer(si, "XPT002"));
   if (lp.length) {
     const items = lp.slice(0, 2).map(h => {
