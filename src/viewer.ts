@@ -11,6 +11,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 // 自作の車モデル（前＝-Z、上＝+Y、原点＝地面の中央）。結果画面に入ったときに一度だけ読み込む
 const CAR_FILES = ["car_liftback_v2", "car_minivan_v1", "car_kei_v1"];
@@ -35,6 +36,7 @@ export class Viewer {
   private camera: THREE.PerspectiveCamera;
   private controls: OrbitControls;
   private planGroup = new THREE.Group();
+  private extGroup = new THREE.Group(); // 外構（塀・植栽）。敷地の座標のまま置く
   private siteGroup = new THREE.Group();
   private ro: ResizeObserver;
   private raf = 0;
@@ -42,6 +44,7 @@ export class Viewer {
   private footprints: FootprintContext | null = null;
   private contextKey = "";
   private sitePoly: [number, number][] = [];
+  private roadsUV: [number, number][][] = [];
   // 描くのは変化があったときだけ（止まっている間は描き直さない）。影も形が変わったときだけ計算する
   private dirty = true;
   private busyUntil = 0;
@@ -83,7 +86,7 @@ export class Viewer {
     const sc = sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.far = 300;
     sun.shadow.radius = 3; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
-    this.scene.add(sun, this.siteGroup, this.planGroup);
+    this.scene.add(sun, this.siteGroup, this.planGroup, this.extGroup);
     // パソコン（マウス操作）だけ、隅や接地面に柔らかい陰（GTAO）を足す。スマホは重いので使わない
     if (!coarse && !/[?&]noao\b/.test(location.search)) {
       const c = new EffectComposer(this.renderer);
@@ -205,6 +208,7 @@ export class Viewer {
       if ((o as THREE.Mesh).isMesh) swapped.push([o as THREE.Mesh, (o as THREE.Mesh).material]);
     });
     const apply = (kind: "depth" | "normal") => swapped.forEach(([m]) => { m.material = mats[kind][isCtx(m) ? 1 : 0]; });
+    const fog = this.scene.fog; this.scene.fog = null;
     const tm = r.toneMapping; r.toneMapping = THREE.NoToneMapping; // 深度・法線・マスクは値そのものを書き出す
     this.scene.background = new THREE.Color(0x000000);
     apply("depth"); r.render(this.scene, cam); const depth = grab();
@@ -223,7 +227,7 @@ export class Viewer {
     this.scene.overrideMaterial = null;
     hidden.forEach(o => (o.visible = true)); hideLines.forEach(o => (o.visible = true));
     white.dispose();
-    r.toneMapping = tm;
+    r.toneMapping = tm; this.scene.fog = fog;
     this.scene.background = saved.bg;
     const camera = { position: cam.position.toArray(), target: target.toArray(), fov: cam.fov, near: cam.near, far: cam.far, width: w, height: h };
     cam.position.copy(saved.pos); cam.aspect = saved.aspect; cam.near = saved.near; cam.far = saved.far; cam.updateProjectionMatrix();
@@ -258,6 +262,9 @@ export class Viewer {
     const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
     const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), 10);
 
+    // 遠くを空気でかすませる（地面の端や遠くの建物が空になじむ）
+    this.scene.fog = new THREE.Fog(0xe9eff2, span * 4 + 40, span * 16 + 260);
+    this.roadsUV = res.site.roadsUV as [number, number][][];
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(span * 8, 1200), Math.max(span * 8, 1200)), new THREE.MeshStandardMaterial({ color: 0xe9edee }));
     ground.rotation.x = -Math.PI / 2; ground.position.set(cu, -0.02, -cv); ground.receiveShadow = true;
     this.siteGroup.add(ground);
@@ -348,6 +355,8 @@ export class Viewer {
       // 月極駐車場は半分ほど、ほかは全区画に車を置く
       if (plan.use !== "other" || i % 2 === 0) this.planGroup.add(carModels?.length ? modelCar(s, carModels[i % carModels.length]) : car(s, CAR_COLORS[i % CAR_COLORS.length]));
     });
+    clear(this.extGroup);
+    this.extGroup.add(exterior(this.sitePoly, this.roadsUV, this.planGroup));
     // 車のモデルがまだなら読み込んで、届いたら置き直す
     if (plan.stalls.length && !carModels) loadCars().then(() => { if (this.lastPlan?.plan === plan && carModels?.length) this.setPlan(plan, rotation); });
   }
@@ -544,6 +553,85 @@ function car(s: { u0: number; v0: number; u1: number; v1: number }, color: numbe
   return g;
 }
 
+// ---- 外構：道路以外の境界にブロック塀、空いているところに木と低木 ----
+function inPoly(P: [number, number][], u: number, v: number): boolean {
+  let c = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const [ui, vi] = P[i], [uj, vj] = P[j];
+    if ((vi > v) !== (vj > v) && u < ((uj - ui) * (v - vi)) / (vj - vi) + ui) c = !c;
+  }
+  return c;
+}
+function exterior(P: [number, number][], roads: [number, number][][], plan: THREE.Object3D): THREE.Group {
+  const g = new THREE.Group();
+  if (P.length < 3) return g;
+  // 建物・駐車区画・車のある場所（真上から見た範囲）。ここには何も置かない
+  plan.updateMatrixWorld(true);
+  const taken = plan.children.map(c => new THREE.Box3().setFromObject(c)).filter(b => !b.isEmpty());
+  const free = (u: number, v: number, r: number) => inPoly(P, u, v) && !taken.some(b => u > b.min.x - r && u < b.max.x + r && -v > b.min.z - r && -v < b.max.z + r);
+  let area2 = 0; for (let i = 0; i < P.length; i++) { const [a, b2] = P[i], [c, d] = P[(i + 1) % P.length]; area2 += a * d - c * b2; }
+  const inward = area2 > 0 ? 1 : -1; // 左回りなら辺の左側が内側
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+  const wallGeo: THREE.BufferGeometry[] = [], spots: [number, number][] = [], corners: [number, number][] = [];
+  for (let i = 0; i < P.length; i++) {
+    const [u0, v0] = P[i], [u1, v1] = P[(i + 1) % P.length];
+    const L = Math.hypot(u1 - u0, v1 - v0); if (L < 0.5) continue;
+    const tu = (u1 - u0) / L, tv = (v1 - v0) / L, nu = -tv * inward, nv = tu * inward; // nu,nv：内向き
+    const mu = (u0 + u1) / 2, mv = (v0 + v1) / 2;
+    const isRoad = roads.some(R => inPoly(R, mu - nu * 1, mv - nv * 1));
+    if (!isRoad) {
+      // ブロック塀（高さ0.8m・厚さ12cm）を境界の少し内側に
+      const geo = meterUVBox(L, 0.8, 0.12);
+      geo.rotateY(Math.atan2(tv, tu)).translate(mu + nu * 0.08, 0.4, -(mv + nv * 0.08));
+      wallGeo.push(geo);
+    }
+    // 低木の候補：塀ぎわに2.5mおき（道路ぎわには置かない）
+    if (!isRoad) for (let t = 1.2; t < L - 1; t += 2.5) spots.push([u0 + tu * t + nu * 0.7, v0 + tv * t + nv * 0.7]);
+    // 木の候補：道路に面していない角（建物を隠さないよう、木は角だけ・少なめ）
+    const prevRoad = roads.some(R => { const [pu, pv] = P[(i + P.length - 1) % P.length]; const q = [(pu + u0) / 2, (pv + v0) / 2]; const a = Math.hypot(u0 - pu, v0 - pv) || 1; return inPoly(R, q[0] - (-(v0 - pv) / a * inward), q[1] - ((u0 - pu) / a * inward)); });
+    if (!isRoad && !prevRoad) {
+      const [pu, pv] = P[(i + P.length - 1) % P.length], a = Math.hypot(u0 - pu, v0 - pv) || 1;
+      const qu = (pu - u0) / a, qv = (pv - v0) / a; // 角から前の辺の向き
+      corners.push([u0 + (tu + qu) * 1.4, v0 + (tv + qv) * 1.4]);
+    }
+  }
+  if (wallGeo.length) {
+    const wall = new THREE.Mesh(mergeGeometries(wallGeo.map(x => x.toNonIndexed())), texMat("ground_concrete", 0xdad8d2, 0.6, THREE.FrontSide, 1.45));
+    wall.castShadow = true; wall.receiveShadow = true; g.add(wall);
+  }
+  // 木：幹と、色の違う葉の固まり2〜3個（低いポリゴンで軽く）
+  const trunk: THREE.BufferGeometry[] = [], leaves: THREE.BufferGeometry[] = [], shrubs: THREE.BufferGeometry[] = [];
+  const greens = [0x5f8f4a, 0x6f9c52, 0x4f7f43, 0x7aa35a].map(c => new THREE.Color(c));
+  const tint = (geo: THREE.BufferGeometry, c: THREE.Color) => {
+    const n = geo.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const k = 0.9 + rnd() * 0.2; a[i * 3] = c.r * k; a[i * 3 + 1] = c.g * k; a[i * 3 + 2] = c.b * k; }
+    geo.setAttribute("color", new THREE.BufferAttribute(a, 3)); return geo;
+  };
+  let trees = 0, bushes = 0;
+  for (const [u, v] of corners) {
+    if (trees >= 3 || !free(u, v, 1.0)) continue;
+    const H = 2.6 + rnd() * 1.2, x = u, z = -v;
+    trunk.push(new THREE.CylinderGeometry(0.07, 0.11, H * 0.55, 6).translate(x, H * 0.275, z).toNonIndexed());
+    const k = 2 + Math.floor(rnd() * 2);
+    for (let j = 0; j < k; j++) {
+      const r = 0.55 + rnd() * 0.4;
+      leaves.push(tint(new THREE.IcosahedronGeometry(r, 1).translate(x + (rnd() - 0.5) * 0.7, H * 0.62 + j * 0.45 + rnd() * 0.2, z + (rnd() - 0.5) * 0.7), greens[Math.floor(rnd() * 4)]));
+    }
+    trees++;
+  }
+  for (const [u, v] of spots) {
+    if (bushes >= 28 || !free(u, v, 0.4)) continue;
+    const r = 0.3 + rnd() * 0.2;
+    shrubs.push(tint(new THREE.IcosahedronGeometry(r, 1).scale(1.4, 0.8, 1.4).translate(u, r * 0.7, -v), greens[Math.floor(rnd() * 4)]));
+    bushes++;
+  }
+  const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  if (trunk.length) { const m = new THREE.Mesh(mergeGeometries(trunk), new THREE.MeshStandardMaterial({ color: 0x6b5442, roughness: 0.9 })); m.castShadow = true; g.add(m); }
+  for (const list of [leaves, shrubs]) if (list.length) { const m = new THREE.Mesh(mergeGeometries(list.map(x => x.index ? x.toNonIndexed() : x)), leafMat); m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  return g;
+}
+
 // 寄棟屋根：底面 L×S（軒の出を含む）、棟の長さ L−S
 function hipRoof(L: number, S: number, rise: number): THREE.BufferGeometry {
   const hl = L / 2, hs = S / 2, r = Math.max(0, hl - hs);
@@ -565,9 +653,10 @@ function hipRoof(L: number, S: number, rise: number): THREE.BufferGeometry {
 
 function building(b: Box, pal: Palette): THREE.Group {
   const g = new THREE.Group();
-  const w = b.u1 - b.u0, d = b.v1 - b.v0, h = b.floors * b.floorHeight;
-  const y0 = (b.baseFloor ?? 0) * b.floorHeight;
+  const w = b.u1 - b.u0, d = b.v1 - b.v0, h = b.floors * b.floorHeight, fh = b.floorHeight;
+  const y0 = (b.baseFloor ?? 0) * fh;
   const cx = (b.u0 + b.u1) / 2, cz = -(b.v0 + b.v1) / 2;
+  const onGround = y0 === 0;
   const wallTex = b.kind === "house" ? pal.wallTex : b.kind === "apartment" ? pal.aptTex : pal.storeTex;
   const body = new THREE.Mesh(meterUVBox(w, h, d), texMat(wallTex, pal.tint, 0.8, THREE.FrontSide, pal.gain));
   body.position.set(cx, y0 + h / 2, cz); body.castShadow = true; body.receiveShadow = true;
@@ -575,58 +664,105 @@ function building(b: Box, pal: Palette): THREE.Group {
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry), new THREE.LineBasicMaterial({ color: pal.edge }));
   edges.position.copy(body.position); g.add(edges);
   const accent = texMat(pal.accentTex, pal.accentTint, 0.6, THREE.FrontSide, 1.1);
-  // 和風：1階の腰板と、各階の上の庇
-  if (pal.band && y0 === 0 && b.kind !== "store") {
-    const koshi = new THREE.Mesh(meterUVBox(w + 0.04, 0.9, d + 0.04), accent);
-    koshi.position.set(cx, 0.45, cz); g.add(koshi);
-  }
-  if (pal.band) {
-    for (let f = 1; f < b.floors; f++) {
-      const hisashi = new THREE.Mesh(new THREE.BoxGeometry(w + 1.0, 0.12, d + 1.0), new THREE.MeshStandardMaterial({ color: pal.roof }));
-      hisashi.position.set(cx, y0 + f * b.floorHeight, cz); hisashi.castShadow = true; g.add(hisashi);
-    }
-  } else {
-    const lineMat = new THREE.LineBasicMaterial({ color: pal.edge });
-    for (let f = 1; f < b.floors; f++) {
-      const y = y0 + f * b.floorHeight;
-      const pts = [[b.u0, b.v0], [b.u1, b.v0], [b.u1, b.v1], [b.u0, b.v1], [b.u0, b.v0]].map(([u, v]) => new THREE.Vector3(u, y, -v));
-      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
-    }
-  }
-  // 窓（正面と側面）：枠の色を付ける
+  const trimMat = new THREE.MeshStandardMaterial({ color: pal.parapet, roughness: 0.7 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
   const winMat = new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.4 }); // ガラスは空を映す
-  const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame });
-  const addWin = (x: number, y: number, z: number, ww: number, wh: number, side: boolean) => {
-    const fr = new THREE.Mesh(new THREE.PlaneGeometry(ww + 0.16, wh + 0.16), frameMat);
-    const gl = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), winMat);
-    for (const [m, off] of [[fr, 0.02], [gl, 0.03]] as const) {
-      if (side) { m.rotation.y = Math.PI / 2; m.position.set(x + off, y, z); } else m.position.set(x, y, z + off);
-      g.add(m);
-    }
+  // 細かい部品は材質ごとに1つの形にまとめて描く（部品が多くても重くならないように）
+  const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const put = (mat: THREE.Material, geo: THREE.BufferGeometry, x: number, y: number, z: number, rotY = 0) => {
+    if (rotY) geo.rotateY(rotY);
+    geo.translate(x, y, z);
+    (parts.get(mat) ?? parts.set(mat, []).get(mat)!).push(geo);
   };
+  const box = (lx: number, ly: number, lz: number) => new THREE.BoxGeometry(lx, ly, lz);
+
+  // 基礎：地面から0.45mのコンクリート（外壁より少し外へ出す）
+  const baseH = onGround && b.kind !== "store" ? 0.45 : 0;
+  if (baseH) put(texMat("ground_concrete", 0xd9d7d2, 0.4, THREE.FrontSide, 1.15), meterUVBox(w + 0.06, baseH, d + 0.06), cx, baseH / 2, cz);
+  // 和風：1階の腰板と、各階の上の庇
+  if (pal.band && onGround && b.kind !== "store") put(accent, meterUVBox(w + 0.04, 0.55, d + 0.04), cx, baseH + 0.275, cz);
+  for (let f = 1; f < b.floors; f++) {
+    const y = y0 + f * fh;
+    if (pal.band) put(new THREE.MeshStandardMaterial({ color: pal.roof }), box(w + 1.0, 0.12, d + 1.0), cx, y, cz);
+    else put(trimMat, box(w + 0.06, 0.14, d + 0.06), cx, y, cz); // 幕板（階の境目の帯）
+  }
+
+  // 窓：枠（少し出っ張る）・ガラス（壁より奥）・水切り。face は外向きの向き（0=正面 +z, 1=右 +x, 2=裏 -z, 3=左 -x）
+  const faceRot = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+  const faceAt = (face: number, t: number): [number, number] => // t：その面の左端からの距離
+    face === 0 ? [b.u0 + t, -b.v0] : face === 1 ? [b.u1, -(b.v0 + t)] : face === 2 ? [b.u1 - t, -b.v1] : [b.u0, -(b.v1 - t)];
+  const addWin = (face: number, t: number, y: number, ww: number, wh: number) => {
+    const [x, z] = faceAt(face, t), r = faceRot[face], F = 0.06, D = 0.07;
+    const at = (lx: number, ly: number, lz: number, mat: THREE.Material, geo: THREE.BufferGeometry) => {
+      const c = Math.cos(r), sn = Math.sin(r); // 面の向きに回して、外へ lz だけ出す
+      put(mat, geo, x + lx * c + lz * sn, y + ly, z - lx * sn + lz * c, r);
+    };
+    at(0, 0, 0.012, winMat, new THREE.PlaneGeometry(ww, wh));
+    at(0, wh / 2 + F / 2, D / 2, frameMat, box(ww + 2 * F, F, D));
+    at(0, -wh / 2 - F / 2, D / 2, frameMat, box(ww + 2 * F, F, D));
+    at(-ww / 2 - F / 2, 0, D / 2, frameMat, box(F, wh, D));
+    at(ww / 2 + F / 2, 0, D / 2, frameMat, box(F, wh, D));
+    at(0, -wh / 2 - F - 0.025, 0.06, frameMat, box(ww + 0.24, 0.04, 0.12)); // 水切り
+  };
+  const store = b.kind === "store";
   for (let f = 0; f < b.floors; f++) {
-    const fy = y0 + f * b.floorHeight;
-    const wh = b.kind === "store" ? b.floorHeight * 0.7 : b.floorHeight * 0.42;
-    const yc = fy + (b.kind === "store" ? wh / 2 + 0.2 : b.floorHeight * 0.58);
-    const nU = Math.max(1, Math.floor(w / (b.kind === "store" ? 3 : 2.4)));
-    for (let i = 0; i < nU; i++) {
-      // 戸建ての1階の左端は玄関ドアにする
-      if (b.kind === "house" && f === 0 && (b.baseFloor ?? 0) === 0 && i === 0 && nU > 1) continue;
-      const ww = (w / nU) * (b.kind === "store" ? 0.8 : 0.45);
-      addWin(b.u0 + (i + 0.5) * (w / nU), yc, -b.v0, ww, wh, false);
+    const fy = y0 + f * fh;
+    const wh = store ? fh * 0.7 : fh * 0.42;
+    const yc = fy + (store ? wh / 2 + 0.2 : fh * 0.58);
+    for (let face = 0; face < 4; face++) {
+      const len = face % 2 === 0 ? w : d;
+      const pitch = store && face === 0 ? 3 : face === 0 ? 2.4 : face === 2 ? 3.2 : 3.4; // 正面は多め、裏と横は少なめ
+      const n = Math.max(1, Math.floor(len / pitch));
+      for (let i = 0; i < n; i++) {
+        // 戸建ての1階の正面左端は玄関ドアにする
+        if (b.kind === "house" && f === 0 && onGround && face === 0 && i === 0 && n > 1) continue;
+        // 集合住宅の裏は共用廊下なので、窓は小さめ
+        const ww = (len / n) * (store && face === 0 ? 0.8 : face === 0 ? 0.45 : 0.36);
+        const hh = b.kind === "apartment" && face === 2 && f > 0 ? wh * 0.55 : wh;
+        addWin(face, (i + 0.5) * (len / n), b.kind === "apartment" && face === 2 && f > 0 ? fy + fh * 0.72 : yc, ww, hh);
+      }
     }
-    const nV = Math.max(1, Math.floor(d / 3));
-    for (let i = 0; i < nV; i++) addWin(b.u1, yc, -(b.v0 + (i + 0.5) * (d / nV)), (d / nV) * 0.4, wh, true);
   }
-  if (b.kind === "house" && (b.baseFloor ?? 0) === 0) {
+  if (b.kind === "house" && onGround) {
     const nU = Math.max(1, Math.floor(w / 2.4));
-    const door = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 2.05), accent);
-    door.position.set(nU > 1 ? b.u0 + 0.5 * (w / nU) : b.u0 + 0.9, 1.03, -b.v0 + 0.04); g.add(door);
+    const dx = nU > 1 ? b.u0 + 0.5 * (w / nU) : b.u0 + 0.9;
+    put(accent, new THREE.PlaneGeometry(0.95, 2.05), dx, baseH + 1.03, -b.v0 + 0.04);
+    put(frameMat, box(1.4, 0.1, 0.9), dx, baseH + 2.35, -b.v0 + 0.45); // 玄関の小さな庇
+    put(texMat("ground_concrete", 0xcfcdc8, 0.4, THREE.FrontSide, 1.1), box(1.6, baseH, 1.0), dx, baseH / 2, -b.v0 + 0.5); // 玄関ポーチ
   }
+  // バルコニー：戸建ては2階正面の一部、集合住宅は2階以上の正面いっぱい。裏は共用廊下の手すり
+  // 手すりは半透明のパネル＋細い笠木（重たい箱に見えないように）
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.25, metalness: 0, transparent: true, opacity: 0.55 });
+  const balcony = (y: number, x0: number, x1: number, depth: number) => {
+    const bw = x1 - x0, mx = (x0 + x1) / 2, z = -b.v0 + depth / 2, zf = -b.v0 + depth - 0.03;
+    put(trimMat, box(bw, 0.18, depth), mx, y + 0.09, z);
+    put(panelMat, box(bw - 0.1, 0.8, 0.02), mx, y + 0.6, zf);
+    put(panelMat, box(0.02, 0.8, depth - 0.1), x0 + 0.03, y + 0.6, z);
+    put(panelMat, box(0.02, 0.8, depth - 0.1), x1 - 0.03, y + 0.6, z);
+    put(frameMat, box(bw, 0.05, 0.06), mx, y + 1.03, zf);
+    put(frameMat, box(0.06, 0.05, depth), x0 + 0.03, y + 1.03, z);
+    put(frameMat, box(0.06, 0.05, depth), x1 - 0.03, y + 1.03, z);
+    for (const px of [x0 + 0.03, x1 - 0.03]) put(frameMat, box(0.05, 0.85, 0.05), px, y + 0.6, zf);
+  };
+  if (b.kind === "house" && b.floors >= 2 && w >= 4) {
+    const bw = Math.min(w * 0.55, 4.5);
+    balcony(y0 + fh, b.u1 - bw - 0.3, b.u1 - 0.3, 0.9);
+  }
+  if (b.kind === "apartment") {
+    for (let f = onGround ? 1 : 0; f < b.floors; f++) {
+      const y = y0 + f * fh;
+      balcony(y, b.u0 + 0.2, b.u1 - 0.2, 1.0);
+      put(new THREE.MeshStandardMaterial({ color: 0x3a4044, roughness: 0.9 }), new THREE.PlaneGeometry(w - 0.4, fh - 1.25), cx, y + 1.1 + (fh - 1.25) / 2, -b.v1 - 0.012, Math.PI); // 廊下の奥の影
+      put(trimMat, box(w - 0.2, 1.1, 0.12), cx, y + 0.55, -b.v1 - 0.06);
+    }
+  }
+
+  // 屋根：軒の出・雨どい（軒先の横どいと、角の縦どい）
+  const gutterMat = new THREE.MeshStandardMaterial({ color: pal.hip ? 0x4a4f52 : pal.frame === 0x1c1f21 ? 0x2a2d2f : 0xe8e8e4, roughness: 0.5 });
   if (b.roof === "gable") {
     const along = w >= d; // 棟は長辺方向
     const L = along ? w : d, S = along ? d : w;
-    const eave = pal.hip ? 0.7 : 0.35;
+    const eave = pal.hip ? 0.75 : 0.5;
     let geo: THREE.BufferGeometry;
     if (pal.hip) {
       geo = hipRoof(L + eave * 2, S + eave * 2, S * 0.3);
@@ -637,19 +773,31 @@ function building(b: Box, pal: Palette): THREE.Group {
       geo.translate(0, 0, -(L + eave * 2) / 2);
       geo.rotateY(Math.PI / 2); // 棟をX方向に
     }
+    const rg = new THREE.Group();
+    rg.position.set(cx, y0 + h, cz);
+    if (!along) rg.rotation.y = Math.PI / 2;
     const roof = new THREE.Mesh(geo, texMat(pal.roofTex, pal.roofTint, 1.0, THREE.DoubleSide, pal.roofGain));
-    roof.position.set(cx, y0 + h, cz);
-    if (!along) roof.rotation.y = Math.PI / 2;
-    roof.castShadow = true;
-    g.add(roof);
-  } else {
-    const para = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), new THREE.MeshStandardMaterial({ color: pal.parapet }));
-    para.position.set(cx, y0 + h + 0.25, cz); para.castShadow = true;
-    g.add(para);
-    if (pal.band) { // 和風の陸屋根は笠木を濃く
-      const kasagi = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.08, d + 0.2), new THREE.MeshStandardMaterial({ color: pal.roof }));
-      kasagi.position.set(cx, y0 + h + 0.54, cz); g.add(kasagi);
+    roof.castShadow = true; rg.add(roof);
+    // 屋根の厚み（鼻隠し）
+    const fascia = new THREE.Mesh(box(L + eave * 2, 0.16, S + eave * 2), gutterMat); fascia.position.y = -0.08; rg.add(fascia);
+    const gutters: THREE.BufferGeometry[] = [];
+    for (const sz of [-1, 1]) gutters.push(new THREE.CylinderGeometry(0.07, 0.07, L + eave * 2, 8).rotateZ(Math.PI / 2).translate(0, -0.1, sz * (S / 2 + eave + 0.05)));
+    if (pal.hip) for (const sx of [-1, 1]) gutters.push(new THREE.CylinderGeometry(0.07, 0.07, S + eave * 2, 8).rotateX(Math.PI / 2).translate(sx * (L / 2 + eave + 0.05), -0.1, 0));
+    // 縦どい：軒先から壁の角へおりる
+    const dh = y0 + h - 0.15;
+    for (const [sx, sz] of [[-1, 1], [1, -1]]) {
+      gutters.push(new THREE.CylinderGeometry(0.045, 0.045, dh, 8).translate(sx * (L / 2 - 0.15), -dh / 2 - 0.1, sz * (S / 2 + 0.08)));
+      gutters.push(box(0.09, 0.09, eave).translate(sx * (L / 2 - 0.15), -0.12, sz * (S / 2 + eave / 2 + 0.05)));
     }
+    const gm = new THREE.Mesh(mergeGeometries(gutters), gutterMat); gm.castShadow = true; rg.add(gm);
+    g.add(rg);
+  } else {
+    put(trimMat, box(w, 0.5, d), cx, y0 + h + 0.25, cz); // パラペット
+    put(pal.band ? new THREE.MeshStandardMaterial({ color: pal.roof }) : frameMat, box(w + 0.2, 0.08, d + 0.2), cx, y0 + h + 0.54, cz); // 笠木
+  }
+  for (const [mat, list] of parts) {
+    const m = new THREE.Mesh(mergeGeometries(list.map(x => x.index ? x.toNonIndexed() : x)), mat);
+    m.castShadow = true; m.receiveShadow = true; g.add(m);
   }
   return g;
 }
