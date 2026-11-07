@@ -239,7 +239,33 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     }
     try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
   };
-  const info = await siteInfo(lat, lng, fetchJson, only);
+  const [info, elevation] = await Promise.all([
+    siteInfo(lat, lng, fetchJson, only),
+    // 標高は単一点の地形参考情報。リクエストごとに上流へ送らず約10m単位で1日キャッシュする。
+    only && !only.includes("elevation") ? Promise.resolve(null) : gsiElevation(lat, lng, ctx),
+  ]);
   console.log(JSON.stringify({ evt: "site-info", apis: Object.keys(info).length }));
-  return json({ available: true, info, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
+  return json({ available: true, info, elevation, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
+}
+
+// 国土地理院の試験公開標高API。過度な利用を避けるため座標は4桁に丸めて共有キャッシュ。
+async function gsiElevation(lat: number, lng: number, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<{ value: number; hsrc: string } | null> {
+  const y = Math.round(lat * 1e4) / 1e4, x = Math.round(lng * 1e4) / 1e4;
+  const k = new Request(`https://cache.internal/gsi-elevation/${x}/${y}`);
+  const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
+  try {
+    let response = await cache.match(k);
+    if (!response) {
+      const endpoint = `https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=${x}&lat=${y}&outtype=JSON`;
+      const up = await fetch(endpoint, { signal: AbortSignal.timeout(4500) });
+      if (!up.ok) return null;
+      response = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
+      ctx.waitUntil(cache.put(k, response.clone()));
+    }
+    const data = await response.json() as { elevation?: number | string; hsrc?: string };
+    if (data.elevation == null || data.elevation === "-----") return null;
+    const value = Number(data.elevation);
+    if (!Number.isFinite(value) || Math.abs(value) > 9000) return null;
+    return { value, hsrc: typeof data.hsrc === "string" ? data.hsrc.slice(0, 32) : "標高モデル" };
+  } catch { return null; }
 }
