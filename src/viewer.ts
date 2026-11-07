@@ -24,6 +24,8 @@ function loadCars(): Promise<void> {
     g.scene.traverse(o => {
       const m = o as THREE.Mesh; if (!m.isMesh) return;
       m.castShadow = true; m.receiveShadow = true;
+      for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) mat.userData.env = true;
+      applyEnv(m.material);
     });
     return g.scene;
   }))).then(list => { carModels = list; }).catch(() => { carModels = []; /* 読み込めなければ箱の車のまま */ });
@@ -48,6 +50,7 @@ export class Viewer {
   // 描くのは変化があったときだけ（止まっている間は描き直さない）。影も形が変わったときだけ計算する
   private dirty = true;
   private busyUntil = 0;
+  private aoPending = false;
   /** 次のフレームで描き直す。ms を渡すとその間は描き続ける（読み込み中・慣性の回転など） */
   requestRender(ms = 0, shadows = false) {
     this.dirty = true;
@@ -69,9 +72,14 @@ export class Viewer {
     el.appendChild(this.renderer.domElement);
     this.scene.background = skyGradient();
     // 空の写真（Poly Haven の CC0 HDRI）を環境光と映り込みに使う。届くまでは今の明かりだけで描く
-    new HDRLoader().load("/assets/tex/sky_suburban_garden.hdr", (hdr) => {
+    new HDRLoader().setDataType(THREE.FloatType).load("/assets/tex/sky_suburban_garden.hdr", (hdr) => {
+      // 環境光：空の明るさの分布を最初に1回だけ9個の数（球面調和関数）にまとめる。毎フレームの計算がほぼ要らない
+      this.scene.add(new THREE.LightProbe(skySH(hdr), ENV_INTENSITY));
+      // 空の映り込みは、窓ガラスと車だけ（全部の材質に掛けると描くのが重い）
       hdr.mapping = THREE.EquirectangularReflectionMapping;
-      this.scene.environment = hdr; this.scene.environmentIntensity = ENV_INTENSITY;
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      skyEnv = pmrem.fromEquirectangular(hdr).texture; pmrem.dispose();
+      this.scene.traverse(o => applyEnv((o as THREE.Mesh).material));
       this.requestRender(0, true);
     });
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.5, 2000);
@@ -105,6 +113,7 @@ export class Viewer {
     // 指を離したあとも、慣性の間とPLATEAUの読み込みのために少しだけ描き続ける
     this.controls.addEventListener("end", () => { this.busyUntil = performance.now() + (this.context ? 2000 : 300); });
     const lastPos = new THREE.Vector3(), lastTarget = new THREE.Vector3();
+    let lastMove = 0, lastFull = 0;
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
       if (this.anim) {
@@ -119,11 +128,18 @@ export class Viewer {
       // 慣性の動きが目に見えないほど小さくなったら「止まった」とみなす
       const dist = this.camera.position.distanceTo(this.controls.target) || 1;
       const moved = this.camera.position.distanceTo(lastPos) + this.controls.target.distanceTo(lastTarget) > dist * 2e-4;
-      if (moved) { lastPos.copy(this.camera.position); lastTarget.copy(this.controls.target); }
-      if (!(moved || this.dirty || performance.now() < this.busyUntil)) return;
+      const now = performance.now();
+      if (moved) { lastPos.copy(this.camera.position); lastTarget.copy(this.controls.target); lastMove = now; }
+      const busy = now < this.busyUntil;
+      if (!(moved || this.dirty || busy || this.aoPending)) return;
       this.dirty = false;
       this.context?.update(this.renderer);
-      this.draw();
+      // 動かしている間は隅の陰影（GTAO）を省いて軽く描き、止まったら陰影つきで描き直す。
+      // 周辺建物の読み込み中など、止まったまま描き続けるときは陰影つきを0.4秒おきにする
+      const moving = moved || !!this.anim || now - lastMove < 120;
+      const full = !this.composer || (!moving && (!busy || now - lastFull > 400));
+      if (full) { this.draw(); lastFull = now; this.aoPending = false; }
+      else { this.renderer.render(this.scene, this.camera); this.aoPending = true; }
       this.onBearing(this.bearing());
     };
     loop();
@@ -484,6 +500,36 @@ function skyGradient(): THREE.Texture {
   g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
+// 空の映り込み（窓ガラス・車だけに使う）
+let skyEnv: THREE.Texture | null = null;
+function applyEnv(mat: THREE.Material | THREE.Material[] | undefined) {
+  for (const m of (Array.isArray(mat) ? mat : mat ? [mat] : []) as THREE.MeshStandardMaterial[]) {
+    if (m.userData?.env && skyEnv && m.envMap !== skyEnv) { m.envMap = skyEnv; m.needsUpdate = true; }
+  }
+}
+function reflective<T extends THREE.MeshStandardMaterial>(m: T): T { m.userData.env = true; applyEnv(m); return m; }
+/** 正距円筒の HDR 画像から、放射輝度の球面調和関数（3次）を求める */
+function skySH(hdr: THREE.DataTexture): THREE.SphericalHarmonics3 {
+  const { data, width: W, height: H } = hdr.image as { data: Float32Array; width: number; height: number };
+  const sh = new THREE.SphericalHarmonics3(), basis = new Array<number>(9).fill(0);
+  const dir = new THREE.Vector3(), c = new THREE.Color();
+  let total = 0;
+  for (let y = 0; y < H; y += 2) {
+    const th = ((y + 0.5) / H) * Math.PI, st = Math.sin(th);
+    for (let x = 0; x < W; x += 2) {
+      const ph = ((x + 0.5) / W) * Math.PI * 2;
+      dir.set(-st * Math.cos(ph), Math.cos(th), st * Math.sin(ph));
+      THREE.SphericalHarmonics3.getBasisAt(dir, basis);
+      const i = (y * W + x) * 4;
+      c.setRGB(data[i], data[i + 1], data[i + 2]);
+      for (let k = 0; k < 9; k++) sh.coefficients[k].x += c.r * basis[k] * st, sh.coefficients[k].y += c.g * basis[k] * st, sh.coefficients[k].z += c.b * basis[k] * st;
+      total += st;
+    }
+  }
+  const norm = (4 * Math.PI) / total;
+  for (const v of sh.coefficients) v.multiplyScalar(norm);
+  return sh;
+}
 // 明るさの調整値（ACES と空の環境光を前提にした値）
 const EXPOSURE = 1.05, ENV_INTENSITY = 0.8, HEMI = 0.45, SUN = 3.4;
 /** 北から時計回りの角度 */
@@ -536,8 +582,8 @@ function modelCar(s: { u0: number; v0: number; u1: number; v1: number }, model: 
 // 普通自動車（全長4.4m・全幅1.7m）：車体・客室・窓・タイヤ。車のモデルが読み込めないときの代わり
 function car(s: { u0: number; v0: number; u1: number; v1: number }, color: number): THREE.Group {
   const g = new THREE.Group();
-  const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.35 });
-  const glass = new THREE.MeshStandardMaterial({ color: 0x334048, roughness: 0.1 });
+  const paint = reflective(new THREE.MeshStandardMaterial({ color, roughness: 0.35 }));
+  const glass = reflective(new THREE.MeshStandardMaterial({ color: 0x334048, roughness: 0.1 }));
   const tire = new THREE.MeshStandardMaterial({ color: 0x1b1b1b });
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.65, 4.4), paint);
   body.position.y = 0.6; body.castShadow = true; g.add(body);
@@ -666,7 +712,7 @@ function building(b: Box, pal: Palette): THREE.Group {
   const accent = texMat(pal.accentTex, pal.accentTint, 0.6, THREE.FrontSide, 1.1);
   const trimMat = new THREE.MeshStandardMaterial({ color: pal.parapet, roughness: 0.7 });
   const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
-  const winMat = new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.4 }); // ガラスは空を映す
+  const winMat = reflective(new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.08, metalness: 0.1, envMapIntensity: 1.4 })); // ガラスは空を映す
   // 細かい部品は材質ごとに1つの形にまとめて描く（部品が多くても重くならないように）
   const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const put = (mat: THREE.Material, geo: THREE.BufferGeometry, x: number, y: number, z: number, rotY = 0) => {
