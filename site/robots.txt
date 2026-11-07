@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /go/
+Disallow: /api/
+
+Sitemap: https://realestate.ai-investment-research.net/sitemap.xml
