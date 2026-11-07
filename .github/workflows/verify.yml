@@ -19,3 +19,16 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx tsc --noEmit
+      # A4横・3ページで印刷できるかをヘッドレスChromeで確認する（サンプルデータのみ）。
+      - name: PDF print smoke test
+        run: |
+          node scripts/report-preview.mjs /tmp/land-report-preview.html
+          google-chrome --headless --no-sandbox --disable-gpu --no-pdf-header-footer --print-to-pdf=/tmp/land-report-preview.pdf file:///tmp/land-report-preview.html
+          pdfinfo /tmp/land-report-preview.pdf | grep -E '^Pages:[[:space:]]+3
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: land-report-preview
+          path: /tmp/land-report-preview.pdf
+          if-no-files-found: ignore
