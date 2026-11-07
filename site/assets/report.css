@@ -1,0 +1,80 @@
+/* 土地の未来図：印刷用レポート（A4横3ページ）。通常画面と独立したレイアウト。 */
+.print-sheet:has(.rp-document) { max-width: 1120px; border: 0; padding: 0; background: transparent; }
+.rp-document { display: grid; gap: 16px; }
+.rp-page {
+  box-sizing: border-box; width: 100%; min-width: 0;
+  min-height: 660px; padding: 22px 26px;
+  background: #fff; color: #1f3339; border: 1px solid #dfe7e9;
+  display: flex; flex-direction: column; gap: 12px;
+  font-family: system-ui, -apple-system, "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+}
+.rp-head { display: flex; align-items: end; justify-content: space-between; border-bottom: 2px solid #2d756c; padding-bottom: 8px; gap: 10px; }
+.rp-head small { font-size: 11px; color: #54676a; }
+.rp-head h2 { font-size: 19px; margin: 3px 0 0; line-height: 1.25; }
+.rp-head > b { color: #2d756c; font-size: 14px; white-space: nowrap; }
+.rp-body { flex: 1; min-height: 0; }
+.rp-footer { border-top: 1px solid #d9e2e4; padding-top: 7px; display: flex; justify-content: space-between; gap: 10px; color: #627377; font-size: 10px; }
+.rp-four { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; }
+.rp-card { min-width: 0; min-height: 0; border: 1px solid #dce6e9; border-radius: 7px; padding: 11px 13px; background: #fff; overflow: hidden; }
+.rp-card h3, .rp-columns h3 { margin: 0 0 8px; font-size: 14px; color: #19574e; }
+.rp-card-title { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; font-size: 13px; white-space: nowrap; overflow: hidden; }
+.rp-card-title strong { text-overflow: ellipsis; overflow: hidden; }
+.rp-card-title span { color: #4f696d; font-size: 11px; }
+.rp-plan { display: flex; flex-direction: column; gap: 6px; }
+.rp-plan img { width: 100%; flex: 1; min-height: 0; object-fit: contain; background: #f0f3f5; display: block; border-radius: 4px; }
+.rp-missing { flex: 1; color: #849396; }
+.rp-card-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; color: #455d62; font-size: 10px; line-height: 1.3; }
+.rp-table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12px; line-height: 1.38; }
+.rp-table th, .rp-table td { border-bottom: 1px solid #e8edef; padding: 6px 4px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.rp-table th { width: 33%; color: #405a5e; font-weight: 600; }
+.rp-table td { color: #233a40; }
+.rp-tag { margin-left: 6px; white-space: nowrap; color: #59737a; font-weight: 400; font-size: 10px; }
+.rp-fine { font-size: 10px; line-height: 1.45; color: #687b80; margin: 9px 0 0; }
+.rp-columns { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 18px; height: 100%; }
+.rp-columns > section { min-width: 0; }
+.rp-side { min-width: 0; background: #f3f7f7; padding: 14px; border-radius: 7px; display: flex; flex-direction: column; gap: 12px; }
+.rp-side h3 { margin-bottom: 0; }
+.rp-checks { padding-left: 20px; margin: 0; font-size: 12px; line-height: 1.6; }
+.rp-checks li { margin-bottom: 5px; }
+.rp-note { margin: 0; padding: 10px; border-left: 3px solid #e7b251; background: #fff; font-size: 11px; line-height: 1.55; }
+.rp-source { margin-top: auto; font-size: 10px; line-height: 1.5; color: #526a6d; overflow-wrap: anywhere; }
+@media (max-width: 680px) {
+  .rp-page { padding: 14px; min-height: auto; }
+  .rp-four { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .rp-plan img { height: 190px; flex: none; }
+  .rp-columns { grid-template-columns: 1fr; gap: 12px; }
+  .rp-footer { flex-direction: column; }
+}
+@media print {
+  @page { size: A4 landscape; margin: 9mm; }
+  .print-sheet:has(.rp-document) { display: block; width: auto; max-width: none; margin: 0; padding: 0; border: 0; background: #fff; }
+  .rp-document { display: block; }
+  .rp-page {
+    width: 279mm; height: 192mm; min-height: 0; padding: 2.5mm 3mm;
+    margin: 0; gap: 2.5mm; border: 0; border-radius: 0;
+    page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .rp-page:last-child { page-break-after: auto; break-after: auto; }
+  .rp-head { padding-bottom: 1.2mm; }
+  .rp-head h2 { font-size: 14pt; margin-top: 0; }
+  .rp-head small { font-size: 7pt; }
+  .rp-head > b { font-size: 9pt; }
+  .rp-footer { padding-top: 1.3mm; font-size: 6.5pt; }
+  .rp-four { grid-template-columns: 1fr 1fr; grid-template-rows: repeat(2, minmax(0,1fr)); gap: 2.8mm; }
+  .rp-card { padding: 2.2mm 3mm; border-radius: 1mm; }
+  .rp-card h3, .rp-columns h3 { font-size: 9pt; margin-bottom: 1.8mm; }
+  .rp-card-title { font-size: 8pt; }
+  .rp-card-title span, .rp-card-meta { font-size: 7pt; }
+  .rp-plan img { flex: 1; height: auto; min-height: 0; }
+  .rp-table { font-size: 7.6pt; line-height: 1.25; }
+  .rp-table th, .rp-table td { padding: 1.5mm 1mm; }
+  .rp-tag { font-size: 6.5pt; }
+  .rp-fine { font-size: 7pt; margin-top: 2mm; }
+  .rp-columns { grid-template-columns: minmax(0,1.7fr) minmax(0,1fr); gap: 4mm; }
+  .rp-side { padding: 3mm; gap: 3mm; }
+  .rp-checks { font-size: 8pt; line-height: 1.45; padding-left: 4mm; }
+  .rp-checks li { margin-bottom: 1mm; }
+  .rp-note { font-size: 7.6pt; padding: 2mm; }
+  .rp-source { font-size: 7pt; }
+}

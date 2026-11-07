@@ -1,15 +1,18 @@
 // 不動産情報ライブラリの各APIから、地点の法規制・ハザード・周辺情報を集める
-type Kind = "poly" | "point" | "line";
+type Kind = "poly" | "point" | "line" | "mixed";
 interface Layer { api: string; label: string; kind: Kind; z: number[]; extra?: Record<string, string>; radius?: number }
 
 export const LAYERS: Layer[] = [
   { api: "XKT001", label: "区域区分", kind: "poly", z: [15, 14, 13] },
   { api: "XKT002", label: "用途地域", kind: "poly", z: [15, 14] },
+  { api: "XKT003", label: "立地適正化計画", kind: "poly", z: [15, 14] },
   { api: "XKT014", label: "防火・準防火地域", kind: "poly", z: [15, 14] },
   { api: "XKT023", label: "地区計画", kind: "poly", z: [15, 14] },
   { api: "XKT024", label: "高度利用地区", kind: "poly", z: [15, 14] },
   { api: "XKT030", label: "都市計画道路", kind: "line", z: [15, 14], radius: 25 },
   { api: "XKT026", label: "洪水浸水想定区域（想定最大規模）", kind: "poly", z: [15, 14, 13] },
+  { api: "XKT027", label: "高潮浸水想定区域", kind: "poly", z: [15, 14, 13] },
+  { api: "XST001", label: "過去の災害履歴（収録地域のみ）", kind: "mixed", z: [15, 14, 13], radius: 150 },
   { api: "XKT029", label: "土砂災害警戒区域", kind: "poly", z: [15, 14, 13] },
   { api: "XKT020", label: "大規模盛土造成地", kind: "poly", z: [15, 14, 13] },
   { api: "XKT025", label: "液状化の発生傾向", kind: "poly", z: [15, 14, 13] },
@@ -43,6 +46,8 @@ function metersBetween([lng1, lat1]: Pos, [lng2, lat2]: Pos) {
 }
 function distToGeom(g: Feature["geometry"], p: Pos): number {
   if (!g) return Infinity;
+  // 災害履歴にポリゴン・点・線が混在する。区域内は0mとし、境界線からの距離とは区別。
+  if ((g.type === "Polygon" || g.type === "MultiPolygon") && containsPoint(g, p)) return 0;
   const kx = 111320 * Math.cos((p[1] * Math.PI) / 180), ky = 111320;
   const seg = (a: Pos, b: Pos) => {
     const ax = (a[0] - p[0]) * kx, ay = (a[1] - p[1]) * ky, bx = (b[0] - p[0]) * kx, by = (b[1] - p[1]) * ky;
@@ -68,6 +73,12 @@ export async function siteInfo(lat: number, lng: number, fetchJson: (url: string
   const year = String(new Date().getUTCFullYear() - 1);
   const out: Record<string, unknown> = {};
   await Promise.all(LAYERS.filter(l => !only || only.includes(l.api)).map(async (layer) => {
+    // 一部自治体で非商用ライセンスとなるレイヤーは、自治体別の許諾判定が整うまで提供を保留。
+    // 「区域外」と誤解されないようエラーを返し、画面・PDFでは「未取得」とする。
+    if (layer.api === "XKT029") {
+      out[layer.api] = { label: layer.label, error: "license_review_required" };
+      return;
+    }
     let lastStatus = 0;
     for (const z of layer.z) {
       const [tx, ty] = tileOf(lng, lat, z);
