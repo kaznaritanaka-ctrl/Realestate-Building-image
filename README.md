@@ -4,7 +4,7 @@
 
 ## site/（公開準備中の静的サイト）
 
-`https://realestate.ai-investment-research.net/` に配置する、ビルド不要の静的サイト。ASP（アフィリエイト）審査用のサイトURL登録を兼ねる。
+`https://realestate.ai-investment-research.net/` に配置する、静的アセット＋TypeScriptで構築したWebアプリ。`src/app.ts` や `src/report.ts` を変更したときは **`npm run build` で `site/assets/app.js` を再生成する必要がある**。
 
 - `index.html` — サービス概要・利用イメージ・サンプル・開発状況・注意事項・運営者情報
 - `privacy.html` — プライバシーポリシー
@@ -17,7 +17,7 @@
 既存の ai-investment-* と同じく Workers で運用する。設定は `wrangler.jsonc`（Worker名 `realestate-site`、カスタムドメイン `realestate.ai-investment-research.net` を宣言済み）。
 
 1. Cloudflare ダッシュボード → Workers & Pages → 作成 → 「リポジトリをインポート」→ このリポジトリ
-2. ビルドコマンド：なし ／ デプロイコマンド：`npx wrangler deploy`（既定のまま）
+2. **Cloudflare Workers Buildsのビルドコマンドに `npm run build` を設定**し、デプロイコマンドを `npx wrangler deploy` にする。Workers Buildsは `wrangler.jsonc` のカスタムbuild設定を参照しないので、ダッシュボード側に明示的な設定が必要。ローカルでの `npx wrangler deploy` は `wrangler.jsonc` の `build.command` が実行される。
 3. 以後 `main` への push で自動デプロイ
 4. 投資系とは別 Worker・別シークレットで運用する
 
