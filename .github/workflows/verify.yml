@@ -21,7 +21,7 @@ jobs:
       - run: npx tsc --noEmit
       # A4横・3ページで印刷できるかをヘッドレスChromeで確認する（サンプルデータのみ）。
       - name: Install CJK fonts for print validation
-        run: sudo apt-get update -qq && sudo apt-get install -y fonts-noto-cjk
+        run: sudo apt-get update -qq && sudo apt-get install -y fonts-noto-cjk poppler-utils
       - name: PDF print smoke test
         run: |
           node scripts/report-preview.mjs /tmp/land-report-preview.html
