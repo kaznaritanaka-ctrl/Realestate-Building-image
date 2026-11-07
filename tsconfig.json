@@ -4,5 +4,5 @@
     "strict": true, "noEmit": true, "allowImportingTsExtensions": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"], "skipLibCheck": true
   },
-  "include": ["engine", "src"], "exclude": ["engine/*.test.ts"]
+  "include": ["engine", "src"], "exclude": ["engine/*.test.ts", "src/*.test.ts", "worker/*.test.ts"]
 }
