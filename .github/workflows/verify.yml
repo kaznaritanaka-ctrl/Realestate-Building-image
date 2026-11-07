@@ -24,7 +24,7 @@ jobs:
         run: |
           node scripts/report-preview.mjs /tmp/land-report-preview.html
           google-chrome --headless --no-sandbox --disable-gpu --no-pdf-header-footer --print-to-pdf=/tmp/land-report-preview.pdf file:///tmp/land-report-preview.html
-          pdfinfo /tmp/land-report-preview.pdf | grep -E '^Pages:[[:space:]]+3
+          pdfinfo /tmp/land-report-preview.pdf | grep -E '^Pages:[[:space:]]+3$'
 
       - uses: actions/upload-artifact@v4
         if: always()
