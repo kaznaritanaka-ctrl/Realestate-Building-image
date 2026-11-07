@@ -6,6 +6,7 @@ import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
+import { buildSiteReport } from "./report.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -339,34 +340,43 @@ $("#copy-btn").addEventListener("click", async () => {
 });
 $("#pdf-btn").addEventListener("click", async () => {
   if (!result || !viewer) return;
-  const btn = $("#pdf-btn") as HTMLButtonElement; btn.disabled = true;
-  const keep = activePlan;
-  const frames = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const btn = $("#pdf-btn") as HTMLButtonElement;
+  btn.disabled = true;
+  const originalPlan = activePlan;
+  const frames = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   const shots: string[] = [];
   try {
-    for (let i = 0; i < result.plans.length; i++) {
-      viewer.setPlan(result.plans[i], result.site.rotation); await frames();
+    // 3案のスクリーンショットは印刷用にブラウザ内で撮影する。画像の外部送信はしない。
+    for (const p of result.plans) {
+      viewer.setPlan(p, result.site.rotation);
+      await frames();
       shots.push(viewer.snapshot("image/jpeg", 0.85));
     }
-  } finally { viewer.setPlan(result.plans[keep], result.site.rotation); btn.disabled = false; }
-  const info = $("#site-info-box details")?.innerHTML.replace(/<summary>[\s\S]*?<\/summary>/, "") ?? "";
-  const s = result.site;
-  $("#print-sheet").innerHTML = `
-    <h1>土地の未来図（β版）：この土地の3案</h1>
-    <p class="meta">${new Date().toLocaleDateString("ja-JP")} 作成・外観：${({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"]}</p>
-    <table class="kv">
-      <tr><th>敷地面積</th><td>約${s.area}㎡（約${(s.area / 3.30579).toFixed(1)}坪）</td></tr>
-      <tr><th>用途地域</th><td>${esc(s.zone.label)}</td></tr>
-      <tr><th>建ぺい率／容積率</th><td>${s.bcr}％／${s.far}％（計算上の容積率 ${s.farEffective}％）</td></tr>
-      <tr><th>前面道路</th><td>${s.roadWidth == null ? "なし" : s.roadWidth >= 12 ? "12m以上" : `約${s.roadWidth}m として計算`}</td></tr>
-    </table>
-    ${result.plans.map((p, i) => `<section class="pplan"><img src="${shots[i]}" alt="${esc(p.title)}の3D"><div>${planHtml(p)}</div></section>`).join("")}
-    ${info && !state.sample ? `<section class="pinfo"><h2>この土地の参考情報</h2>${info}</section>` : ""}
-    <p class="small">表示は参考イメージと概算です。設計図・見積もりではなく、建築できること・法令に適合することを保証するものではありません。概算工事費は当サービスの暫定の目安です。</p>
-    <p class="small">この結果をもう一度開く：${esc(shareUrl())}</p>`;
-  track("save_result", { via: "pdf" });
-  $("#print-view").hidden = false; $("#print-view").scrollTop = 0;
-  ($("#pv-print") as HTMLButtonElement).focus();
+    // 情報照会が終わっていなければ最大8秒だけ待つ。未取得は未取得としてPDFに表示する。
+    const currentInfo: SiteInfo | null = state.sample ? null : await Promise.race<SiteInfo | null>([
+      loadSiteInfo().catch(() => null),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), 8000)),
+    ]);
+    $("#print-sheet").innerHTML = buildSiteReport({
+      result,
+      info: currentInfo,
+      images: shots,
+      isSample: state.sample,
+      preparedAt: new Date(),
+      styleName: ({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"],
+      center: state.points.length ? centroid() : undefined,
+    });
+    track("save_result", { via: "pdf" });
+    $("#print-view").hidden = false;
+    $("#print-view").scrollTop = 0;
+    ($("#pv-print") as HTMLButtonElement).focus();
+  } catch (e) {
+    alertBox("PDF用の画像を準備できませんでした。再度お試しください。");
+    console.warn("report preparation failed", e);
+  } finally {
+    viewer.setPlan(result.plans[originalPlan], result.site.rotation);
+    btn.disabled = false;
+  }
 });
 // 印刷はボタンを押した直後に呼ぶ（iPhoneのSafariは、間に処理を挟むと止める）
 $("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
