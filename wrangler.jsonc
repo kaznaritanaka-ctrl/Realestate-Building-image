@@ -2,6 +2,7 @@
   // 土地の未来図：静的アセット＋API Worker
   "name": "realestate-site",
   "main": "worker/index.ts",
+  "build": { "command": "npm run build" },
   "compatibility_date": "2026-11-01",
   "assets": {
     "directory": "./site",
