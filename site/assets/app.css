@@ -301,10 +301,20 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
 
 /* 結果を残す */
 .keep b { display: block; margin-bottom: 8px; }
-.keep-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.keep-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 900px) { .keep-btns { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .keep-btns .btn { min-height: 44px; padding: 6px 4px; font-size: .85rem; }
 .print-view { position: fixed; inset: 0; z-index: 100; background: #f5f7f8; overflow-y: auto; }
 .print-view[hidden] { display: none; }
+.img-view { position: fixed; inset: 0; z-index: 100; background: #f5f7f8; overflow-y: auto; }
+.img-view[hidden] { display: none; }
+.pv-bar-gap { width: 64px; }
+.iv-list { max-width: 960px; margin: 8px auto 40px; padding: 0 12px; display: grid; gap: 18px; }
+.iv-item { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.iv-item img { display: block; width: 100%; height: auto; border-radius: 4px; }
+.iv-item .iv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.iv-item .iv-row b { font-size: .95rem; }
+.iv-item .iv-row .btn { min-height: 44px; }
 .pv-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: #ffffff; border-bottom: 1px solid var(--line); }
 .pv-bar b { font-size: .95rem; text-align: center; }
 .pv-bar .btn { min-height: 44px; }

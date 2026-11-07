@@ -148,6 +148,7 @@
       <div class="card keep">
         <b>この結果を残す</b>
         <div class="keep-btns">
+          <button type="button" class="btn" id="img-btn">画像で保存</button>
           <button type="button" class="btn" id="pdf-btn">PDFで保存</button>
           <button type="button" class="btn" id="mail-btn">自分宛にメール</button>
           <button type="button" class="btn" id="copy-btn">リンクをコピー</button>
@@ -215,6 +216,15 @@
   </div>
   <p class="pv-hint">「PDFで保存」を押すと印刷の画面が開きます。パソコン・Androidは送信先で「PDFとして保存」、iPhoneは印刷の画面の共有ボタンから「ファイルに保存」を選んでください。</p>
   <div id="print-sheet" class="print-sheet"></div>
+</div>
+<div id="img-view" class="img-view" role="dialog" aria-modal="true" aria-labelledby="iv-title" hidden>
+  <div class="pv-bar">
+    <button type="button" class="btn" id="iv-close">閉じる</button>
+    <b id="iv-title">画像で保存</b>
+    <span class="pv-bar-gap" aria-hidden="true"></span>
+  </div>
+  <p class="pv-hint">「この画像を保存」を押すと、スマホは共有の画面（「画像を保存」で写真に入ります）、パソコンはダウンロードになります。画像を長押ししても保存できます。</p>
+  <div id="iv-list" class="iv-list"></div>
 </div>
 <script src="/assets/app.js" defer></script>
 </body>

@@ -258,7 +258,7 @@ export class Viewer {
     const cu = (Math.min(...us) + Math.max(...us)) / 2, cv = (Math.min(...vs) + Math.max(...vs)) / 2;
     const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), 10);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(span * 8, span * 8), new THREE.MeshStandardMaterial({ color: 0xe9edee }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(span * 8, 1200), Math.max(span * 8, 1200)), new THREE.MeshStandardMaterial({ color: 0xe9edee }));
     ground.rotation.x = -Math.PI / 2; ground.position.set(cu, -0.02, -cv); ground.receiveShadow = true;
     this.siteGroup.add(ground);
 
@@ -350,6 +350,56 @@ export class Viewer {
     });
     // 車のモデルがまだなら読み込んで、届いたら置き直す
     if (plan.stalls.length && !carModels) loadCars().then(() => { if (this.lastPlan?.plan === plan && carModels?.length) this.setPlan(plan, rotation); });
+  }
+
+  /**
+   * 保存用の静止画を描く。
+   * pers：建築パース風（目の高さ1.6mから水平に見る2点透視。縦の線がまっすぐ立つ）。
+   *       カメラを傾けずに画面をずらして（レンズシフト）、地平線を下から3割の高さに置く
+   * view：今の画面と同じ視点
+   */
+  renderStill(kind: "pers" | "view", w = 1800, h = 1200): HTMLCanvasElement {
+    const r = this.renderer, cam = this.camera;
+    const saved = { pos: cam.position.clone(), aspect: cam.aspect, fov: cam.fov, target: this.controls.target.clone(), size: r.getSize(new THREE.Vector2()), pr: r.getPixelRatio() };
+    r.setPixelRatio(1); r.setSize(w, h, false);
+    this.composer?.setPixelRatio(1); this.composer?.setSize(w, h);
+    if (kind === "pers") {
+      const box = new THREE.Box3().setFromObject(this.planGroup);
+      if (box.isEmpty()) box.setFromObject(this.siteGroup);
+      const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+      const ht = Math.max(box.max.y, 3), EYE = 1.6, HORIZON = 0.3;
+      // 今見ている方角のまま、水平に見る
+      const dir = this.controls.target.clone().sub(cam.position).setY(0);
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+      dir.normalize();
+      const S = 2 * Math.tan(THREE.MathUtils.degToRad(20)); // 画面の縦の広さ（画角40°相当）
+      const halfW = (w / 2) * S / h;
+      const rh = Math.hypot(sz.x, sz.z) / 2;
+      const up = 1 - HORIZON;
+      const dist = Math.max(rh / (halfW * 0.72) + rh * 0.5, (ht * 1.1 - EYE) / (up * S * 0.92), 10);
+      cam.position.copy(c).setY(EYE).addScaledVector(dir, -dist);
+      cam.lookAt(c.clone().setY(EYE));
+      // 地平線を中心にした仮の大きな画面の、上側だけを切り取る
+      const virtH = h * (2 * up); // 仮の画面の高さ（地平線から上が up×S、下も同じだけある）
+      cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(up * S));
+      cam.aspect = w / virtH;
+      cam.setViewOffset(w, virtH, 0, 0, w, h);
+    } else {
+      cam.aspect = w / h; cam.updateProjectionMatrix();
+    }
+    this.context?.update(r);
+    r.shadowMap.needsUpdate = true; this.draw();
+    const out = document.createElement("canvas"); out.width = w; out.height = h;
+    out.getContext("2d")!.drawImage(r.domElement, 0, 0, w, h);
+    // 元に戻す
+    cam.clearViewOffset(); cam.fov = saved.fov; cam.aspect = saved.aspect;
+    cam.position.copy(saved.pos); cam.lookAt(saved.target); cam.updateProjectionMatrix();
+    this.controls.target.copy(saved.target);
+    r.setPixelRatio(saved.pr); r.setSize(saved.size.x, saved.size.y, false);
+    this.composer?.setPixelRatio(saved.pr); this.composer?.setSize(saved.size.x, saved.size.y);
+    r.domElement.style.width = "100%"; r.domElement.style.height = "100%";
+    this.requestRender(0, true);
+    return out;
   }
 
   snapshot(type = "image/png", quality?: number): string {

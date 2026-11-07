@@ -370,6 +370,58 @@ $("#pdf-btn").addEventListener("click", async () => {
 });
 // 印刷はボタンを押した直後に呼ぶ（iPhoneのSafariは、間に処理を挟むと止める）
 $("#pv-print").addEventListener("click", () => { track("save_result", { via: "print" }); window.print(); });
+
+// 画像で保存：建築パース風（目線の2点透視）と、今の画面の2枚を作る
+let ivUrls: string[] = [];
+function stamp(cv: HTMLCanvasElement, left: string): HTMLCanvasElement {
+  const g = cv.getContext("2d")!, s = cv.width / 1800, pad = 22 * s;
+  g.font = `600 ${26 * s}px system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+  g.textBaseline = "bottom";
+  const right = "土地の未来図（β版）参考イメージ";
+  for (const [t, align, x] of [[left, "left", pad], [right, "right", cv.width - pad]] as const) {
+    g.textAlign = align;
+    g.lineWidth = 6 * s; g.strokeStyle = "rgba(255,255,255,.85)"; g.strokeText(t, x, cv.height - pad);
+    g.fillStyle = "#2b3a3a"; g.fillText(t, x, cv.height - pad);
+  }
+  return cv;
+}
+$("#img-btn").addEventListener("click", async () => {
+  if (!result || !viewer) return;
+  const btn = $("#img-btn") as HTMLButtonElement; btn.disabled = true;
+  try {
+    const p = result.plans[activePlan];
+    const styleName = ({ wa: "和風", white: "ホワイト", black: "ブラック" } as const)[state.style ?? "white"];
+    const label = `${p.title}・${styleName}`;
+    const shots: [string, string, HTMLCanvasElement][] = [
+      ["パース（目線）", "pers", stamp(viewer.renderStill("pers"), label)],
+      ["今の画面", "view", stamp(viewer.renderStill("view"), label)],
+    ];
+    ivUrls.forEach(u => URL.revokeObjectURL(u)); ivUrls = [];
+    const list = $("#iv-list"); list.innerHTML = "";
+    for (const [name, key, cv] of shots) {
+      const blob = await new Promise<Blob | null>(r => cv.toBlob(r, "image/jpeg", 0.92));
+      if (!blob) continue;
+      const url = URL.createObjectURL(blob); ivUrls.push(url);
+      const file = new File([blob], `tochi-no-miraizu-${key}-${p.id}.jpg`, { type: "image/jpeg" });
+      const item = document.createElement("figure"); item.className = "iv-item";
+      item.innerHTML = `<img alt="${esc(label)}（${name}）"><figcaption class="iv-row"><b>${name}</b><button type="button" class="btn primary">この画像を保存</button></figcaption>`;
+      (item.querySelector("img") as HTMLImageElement).src = url;
+      item.querySelector("button")!.addEventListener("click", async () => {
+        track("save_result", { via: "image" });
+        // スマホは共有の画面（写真に保存できる）。ボタンを押した直後に呼ぶ
+        if (COARSE && navigator.canShare?.({ files: [file] })) {
+          try { await navigator.share({ files: [file] }); return; } catch (e) { if ((e as Error).name === "AbortError") return; }
+        }
+        const a = document.createElement("a"); a.href = url; a.download = file.name;
+        document.body.appendChild(a); a.click(); a.remove();
+      });
+      list.appendChild(item);
+    }
+    $("#img-view").hidden = false; $("#img-view").scrollTop = 0;
+    ($("#iv-close") as HTMLButtonElement).focus();
+  } finally { btn.disabled = false; }
+});
+$("#iv-close").addEventListener("click", () => { $("#img-view").hidden = true; ($("#img-btn") as HTMLButtonElement).focus(); });
 $("#pv-close").addEventListener("click", () => { $("#print-view").hidden = true; ($("#pdf-btn") as HTMLButtonElement).focus(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#print-view").hidden) $("#print-view").hidden = true; });
 
