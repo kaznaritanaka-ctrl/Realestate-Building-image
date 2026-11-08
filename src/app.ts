@@ -1,5 +1,5 @@
 import maplibregl from "maplibre-gl";
-import { type BuildingShape, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
+import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
@@ -610,7 +610,11 @@ function paintStyle() {
 }
 $$<HTMLButtonElement>("#style-pick button").forEach(b => b.addEventListener("click", () => {
   state.style = b.dataset.style as ExteriorStyle; save(); paintStyle();
-  viewer?.setStyle(state.style); track("style", { style: state.style });
+  // 再配置せず全案の高さを更新。表示・PDF・GLB/制御パッケージを同じスタイルにそろえる。
+  if (result) result = { ...result, plans: result.plans.map(p => applyExteriorStyle(p, state.style!)) };
+  viewer?.setStyle(state.style);
+  if (result) $("#plan-detail").innerHTML = planHtml(result.plans[activePlan]);
+  track("style", { style: state.style });
 }));
 
 // Step2：中央の＋の位置に角を追加（地図を直接タップするより狙いやすい）
@@ -851,6 +855,7 @@ function compute(): boolean {
       zoneSource: state.zoneSource === "none" ? undefined : state.zoneSource,
       rotationOffsetDeg: state.rotOffset ?? 0,
       shape: state.shape ?? "auto",
+      exteriorStyle: state.style ?? "white",
     });
   } catch (err) { alertBox((err as Error).message); return false; }
   activePlan = 0;
@@ -1080,7 +1085,7 @@ $("#export-btn").addEventListener("click", async () => {
   const keep = activePlan;
   try {
     const plans = result.plans;
-    const blob = await exportControlPackage(viewer, result, plans, (i) => viewer!.setPlan(plans[i], result!.site.rotation), {
+    const blob = await exportControlPackage(viewer, result, plans, (p) => viewer!.setPlan(p, result!.site.rotation), {
       context: viewer.contextDebug() ? "plateau" : "footprints-or-none",
       focus: state.focus || "compare", stage: state.situation ?? "", sample: !!state.sample,
     });
