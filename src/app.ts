@@ -220,6 +220,7 @@ let result: EngineResult | null = null;
 let activePlan = 0;
 
 function go(step: number) {
+  if (document.body.classList.contains("has-results")) { $("#search-results").innerHTML = ""; document.body.classList.remove("has-results"); }
   const from = state.step;
   if (step === 6 && !compute()) return;
   track("step_enter", { step });
@@ -621,16 +622,29 @@ $("#search-form").addEventListener("submit", async (e) => {
     const data: { geometry: { coordinates: [number, number] }; properties: { title: string } }[] = await res.json();
     ul.innerHTML = "";
     if (!data.length) { ul.innerHTML = "<li class='muted'>見つかりませんでした。表記を変えて試すか、地図を直接動かしてください。</li>"; return; }
-    for (const d of data.slice(0, 8)) {
+    // 候補が出ている間は下のシートを広げる（スマホで候補が「敷地を描く」ボタンに隠れないように）
+    document.body.classList.add("has-results");
+    map.resize();
+    const list = data.slice(0, 8);
+    list.forEach((d, i) => {
       const li = document.createElement("li");
-      const b = document.createElement("button"); b.type = "button"; b.className = "linklike"; b.textContent = d.properties.title;
-      b.addEventListener("click", () => { map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 }); ul.innerHTML = ""; state.located = true; save(); paintStepper(); track("located", { via: "search" }); });
+      const b = document.createElement("button"); b.type = "button"; b.className = "result-item"; b.textContent = d.properties.title;
+      b.addEventListener("click", () => {
+        map.resize(); map.jumpTo({ center: d.geometry.coordinates, zoom: 18.5 });
+        clearResults(); state.located = true; save(); paintStepper(); track("located", { via: "search" });
+      });
+      if (i === 0) b.setAttribute("aria-current", "true");
       li.appendChild(b); ul.appendChild(li);
-    }
+    });
+    // 第一候補は地図でもすぐに表示する（違えばほかの候補を選ぶ）
+    map.jumpTo({ center: list[0].geometry.coordinates, zoom: 18.5 });
+    state.located = true; save(); paintStepper();
   } catch {
     ul.innerHTML = "<li class='muted'>検索できませんでした。地図を直接動かして場所を合わせてください。</li>";
   }
 });
+
+function clearResults() { $("#search-results").innerHTML = ""; document.body.classList.remove("has-results"); map.resize(); }
 
 $("#sample-btn").addEventListener("click", () => {
   // 架空の敷地（約12m×20mのやや変形した土地）。実在の土地を表すものではない

@@ -23,7 +23,12 @@ input, select { font: inherit; padding: 9px 10px; border: 1px solid var(--line);
 .linklike { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
 .sample-link { margin-top: 26px; font-size: .9rem; }
 .results { list-style: none; padding: 0; margin: 0; }
-.results li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: .9rem; }
+.results li { padding: 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.results li.muted { padding: 8px 0; }
+.result-item { display: block; width: 100%; min-height: 44px; padding: 8px 6px; text-align: left; background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; }
+.result-item[aria-current="true"] { background: var(--accent-soft); font-weight: 700; }
+.result-item[aria-current="true"]::after { content: "地図に表示中"; margin-left: 8px; font-size: .75rem; font-weight: 400; color: #5b6b6b; }
+.has-results .results { margin-bottom: 8px; }
 .muted { color: var(--ink-soft); font-size: .88rem; }
 .stat { display: flex; justify-content: space-between; background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; }
 .stat b { color: var(--accent); }
@@ -253,6 +258,9 @@ button.edge-label.sel { background: var(--accent); color: #fff; outline: 3px sol
   body[data-mode="q"] .stage { visibility: hidden; }
   body[data-mode="q"] .panel { margin-top: 0; border-radius: 0; box-shadow: none; }
   body[data-mode="result"] .app { grid-template-rows: 46% 1fr; }
+  /* 住所の候補が出ている間はシートを広げ、説明文を省いて候補を見やすくする */
+  body.has-results[data-mode="map"] .app { grid-template-rows: 34% 1fr; }
+  body.has-results .wstep[data-step="1"] .hint { display: none; }
   .wstep .qtitle { font-size: 1.35rem; }
 }
 
