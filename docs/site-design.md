@@ -1,6 +1,6 @@
 # サイト全体設計（Phase 1 MVP）
 
-- 対象：`https://realestate.ai-investment-research.net/`（土地の未来図｜AI建築イメージ生成）
+- 対象：`https://realestate.ai-investment-research.net/`（土地の未来図｜不動産3Dイメージサービス）
 - 状態：確定版v1（2026-11-05）、**v1.1（2026-11-06）でメール通知を廃止**し、個人情報を持たない構成に変更（詳細は [privacy-architecture.md](privacy-architecture.md)）。親Issue #1。「Q」付きの項目は2026-11-05にすべて推奨案で決定（末尾の決定一覧）。
 - 前提：一人運営。**個人を特定できる情報（メールアドレス・アカウント・住所の文字列）は受け取らない・保存しない。** 収益はASPアフィリエイト（申込みは利用者が広告主のページで直接行う）。
 
