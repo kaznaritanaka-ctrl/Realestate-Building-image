@@ -233,6 +233,7 @@ function go(step: number) {
   const show3d = step === 6;
   // 画面の種類：q＝質問だけ（スマホでは地図を隠す）、map＝地図の操作、result＝3D
   document.body.dataset.mode = show3d ? "result" : (step === 0 || step === 4 || step === 5) ? "q" : "map";
+  ($("#save-jump") as HTMLElement).hidden = !show3d;
   $("#viewer").hidden = !show3d;
   $("#map").style.visibility = show3d ? "hidden" : "visible";
   $("#map-tools").hidden = show3d;
@@ -333,6 +334,15 @@ $("#mail-btn").addEventListener("click", () => {
   ].join("\n");
   track("save_result", { via: "mail" });
   location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+});
+// 上の段の「結果を保存」：保存ボタン4つの場所へ移り、枠を一瞬光らせる
+$("#save-jump").addEventListener("click", () => {
+  const card = document.querySelector<HTMLElement>(".card.keep");
+  if (!card) return;
+  card.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+  card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+  (card.querySelector("button") as HTMLButtonElement | null)?.focus({ preventScroll: true });
+  track("save_jump");
 });
 $("#copy-btn").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(shareUrl()); alertBox("この結果を開くリンクをコピーしました。"); }
