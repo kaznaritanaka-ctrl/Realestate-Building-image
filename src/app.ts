@@ -951,8 +951,11 @@ function paintOrient() {
   if (!result) return;
   const off = state.rotOffset ?? 0;
   const auto = Math.round((result.site.autoRotation * 180) / Math.PI);
-  $("#rot-val").textContent = off ? `向き 自動${off > 0 ? "+" : ""}${off}°` : auto ? `向き自動（敷地に合わせ${auto > 0 ? "+" : ""}${auto}°）` : "向き自動（道路に合わせる）";
-  $("#rot-reset").classList.toggle("off", !off); // 非表示でも場所は確保して、ボタンの位置を動かさない
+  // 2行で表示：1行目「向き自動」か「向き自動+15°」、2行目は説明か「自動に戻す」。枠の幅は固定で、操作パネルが動かないようにする
+  $("#rot-val").textContent = off ? `向き自動${off > 0 ? "+" : "−"}${Math.abs(off)}°` : "向き自動";
+  $("#rot-sub").textContent = auto ? `敷地に合わせ${auto > 0 ? "+" : "−"}${Math.abs(auto)}°` : "道路に合わせる";
+  ($("#rot-sub") as HTMLElement).hidden = !!off;
+  ($("#rot-reset") as HTMLElement).hidden = !off;
 }
 function rotateBy(delta: number) {
   let off = (state.rotOffset ?? 0) + delta;

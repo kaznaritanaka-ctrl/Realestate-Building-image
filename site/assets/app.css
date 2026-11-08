@@ -497,6 +497,12 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
   .stage .gizmo { bottom: 38px; left: 14px; }
 }
 
+/* 向きの表示：2行・幅固定（文字が変わっても操作パネルが動かないように） */
+.orient .orient-mid, .stage .orient .orient-mid, .ctrl-slot .orient .orient-mid { width: 7.6rem; min-width: 7.6rem; max-width: 7.6rem; height: 2.6rem; justify-content: center; }
+.orient .orient-mid b, .stage .orient .orient-mid b, .ctrl-slot .orient .orient-mid b { white-space: nowrap; font-size: .8rem; line-height: 1.3; }
+.orient .rot-line2 { display: block; height: 1.25rem; line-height: 1.25rem; font-size: .72rem; color: var(--ink-soft); white-space: nowrap; text-align: center; }
+.orient .rot-line2 [hidden] { display: none; }
+.orient .rot-line2 .linklike { font-size: .74rem; padding: 0; line-height: 1.25rem; }
 /* 方位の輪と高さの切り替えの間をあける（道路ボタンがはみ出しても重ならないように） */
 .stage .gizmo { gap: 22px; }
 .ctrl-slot[hidden] { display: none; }
