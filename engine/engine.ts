@@ -2,7 +2,9 @@
 import { type Vec2, type Rect, signedArea, area, pointInPolygon, distToSegment, edgeLength, maxRectInMask, rectArea } from "./geom.ts";
 import { ZONES, type ZoneKey, type ZoneInfo } from "./zoning.ts";
 
-export const ENGINE_VERSION = "0.1.0";
+import { planHeight, type ExteriorStyle } from "./roof.ts";
+
+export const ENGINE_VERSION = "0.1.1";
 
 export type RoadWidthClass = "lt4" | "4to6" | "6to12" | "gte12";
 export type UseKey = "house" | "rental" | "other";
@@ -24,6 +26,8 @@ export interface SiteInput {
   zoneSource?: "api" | "user" | "guess";
   /** 上限案の建物の形：auto=長方形より10%以上広くなるときだけL字、rect=長方形、L=L字、U=コの字 */
   shape?: BuildingShape;
+  /** 外観による屋根形状も高さの計算に反映する（既定はwhite） */
+  exteriorStyle?: ExteriorStyle;
 }
 export type BuildingShape = "auto" | "rect" | "L" | "U";
 
@@ -38,6 +42,7 @@ export interface Plan {
   size?: Size;
   title: string;
   subtitle: string;
+  exteriorStyle?: ExteriorStyle;
   buildings: Box[];
   stalls: Rect[];
   metrics: {
@@ -259,9 +264,14 @@ export function computePlans(input: SiteInput): EngineResult {
         : input.zoneSource === "guess" ? "guess" : "reference",
       road: roadEdges.length ? "user" : "unknown",
     },
-    plans,
+    plans: plans.map(p => applyExteriorStyle(p, input.exteriorStyle ?? "white")),
     warnings,
   };
+}
+
+/** 再配置せず外観だけ変更する。高さ以外の規模・費用・選択中の案は変えない。 */
+export function applyExteriorStyle(plan: Plan, exteriorStyle: ExteriorStyle): Plan {
+  return { ...plan, exteriorStyle, metrics: { ...plan.metrics, height: planHeight(plan.buildings, exteriorStyle) } };
 }
 
 interface Ctx {
@@ -327,7 +337,7 @@ function finishMetrics(ctx: Ctx, buildings: Box[], stalls: Rect[], units: number
   const footprint = buildings.filter(b => !b.baseFloor).reduce((s, b) => s + rectArea(b), 0);
   const gfa = buildings.reduce((s, b) => s + rectArea(b) * b.floors, 0);
   const floors = buildings.reduce((m, b) => Math.max(m, (b.baseFloor ?? 0) + b.floors), 0);
-  const height = buildings.reduce((m, b) => Math.max(m, ((b.baseFloor ?? 0) + b.floors) * b.floorHeight + (b.roof === "gable" ? 1.5 : 0.5)), 0);
+  const height = planHeight(buildings);
   return {
     footprint: round1(footprint), gfa: round1(gfa), floors, height: round1(height),
     bcrUsed: round1((footprint / ctx.siteArea) * 100), farUsed: round1((gfa / ctx.siteArea) * 100),

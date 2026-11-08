@@ -1,7 +1,9 @@
 // ComfyUI 等で使う制御パッケージ（白模型・深度・線画・マスク・仕様）を ZIP で書き出す
 import { zipSync, strToU8 } from "three/examples/jsm/libs/fflate.module.js";
 import type { Viewer } from "./viewer.ts";
-import type { EngineResult, Plan } from "../engine/engine.ts";
+import { applyExteriorStyle, type EngineResult, type Plan } from "../engine/engine.ts";
+
+import { roofSpec } from "../engine/roof.ts";
 
 const toPng = (cv: HTMLCanvasElement) => new Promise<Uint8Array>((res) => cv.toBlob(async b => res(new Uint8Array(await b!.arrayBuffer())), "image/png"));
 
@@ -31,27 +33,47 @@ function lineart(depth: HTMLCanvasElement, normal: HTMLCanvasElement): HTMLCanva
   return out;
 }
 
-const ROOF_EN = { gable: "gable roof", flat: "flat roof" } as const;
+const ROOF_EN = { gable: "gable roof", hip: "hip roof", flat: "flat roof" } as const;
 const USE_EN: Record<string, string> = { house: "detached house", apartment: "low-rise apartment building", store: "single-story retail store" };
 
 function promptFor(p: Plan): { prompt: string; negative: string } {
   const b = p.buildings[0];
   const floors = p.metrics.floors;
   const kind = b ? USE_EN[b.kind] : "parking lot";
-  const roof = b ? ROOF_EN[b.roof] : "";
+  const roof = b ? ROOF_EN[roofSpec(b, p.exteriorStyle).kind] : "";
   return {
     prompt: `photorealistic architectural exterior rendering, ${floors ? `${floors}-story ` : ""}Japanese ${kind}${roof ? `, ${roof}` : ""}, residential street in Japan, daylight, clear sky, realistic materials, high detail`,
     negative: "cartoon, anime, illustration, extra floors, distorted geometry, people, text, watermark",
   };
 }
 
-export async function exportControlPackage(viewer: Viewer, res: EngineResult, plans: Plan[], setPlan: (i: number) => void, meta: Record<string, unknown>): Promise<Blob> {
+/** 画像/GLBと同じ形状・高さを制御パッケージに記録する。 */
+export function controlPlanSpec(p: Plan) {
+  p = applyExteriorStyle(p, p.exteriorStyle ?? "white");
+  return {
+    id: p.id, use: p.use, size: p.size ?? null, title: p.title, subtitle: p.subtitle, metrics: p.metrics,
+    exteriorStyle: p.exteriorStyle,
+    buildings: p.buildings.map(b => {
+      const spec = roofSpec(b, p.exteriorStyle);
+      return {
+        kind: b.kind, floors: b.floors, floorHeight: b.floorHeight,
+        roof: spec.kind, roofSpec: spec, baseFloor: b.baseFloor ?? 0,
+        widthM: +(b.u1 - b.u0).toFixed(2), depthM: +(b.v1 - b.v0).toFixed(2),
+      };
+    }),
+    ...promptFor(p),
+  };
+}
+
+export async function exportControlPackage(viewer: Viewer, res: EngineResult, plans: Plan[], setPlan: (plan: Plan) => void, meta: Record<string, unknown>): Promise<Blob> {
+  const exteriorStyle = viewer.getStyle();
+  plans = plans.map(p => applyExteriorStyle(p, exteriorStyle));
   const files: Record<string, Uint8Array> = {};
   const manifest: Record<string, unknown>[] = [];
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
-    setPlan(i);
     for (const view of ["front", "aerial"] as const) {
+      setPlan(p);
       const r = viewer.renderPasses(view);
       const dir = `${p.id}_${view}`;
       files[`${dir}/base.png`] = await toPng(r.base);
@@ -61,6 +83,7 @@ export async function exportControlPackage(viewer: Viewer, res: EngineResult, pl
       files[`${dir}/mask.png`] = await toPng(r.mask);
       manifest.push({ dir, plan: p.id, view, camera: r.camera });
     }
+    setPlan(p); // PNG変換中に表示案が変わっても、GLBはこの案から書き出す
     files[`${p.id}.glb`] = new Uint8Array(await viewer.exportGlb());
   }
   const spec = {
@@ -69,7 +92,8 @@ export async function exportControlPackage(viewer: Viewer, res: EngineResult, pl
     engineVersion: res.version,
     site: { area: res.site.area, zone: res.site.zone.label, bcr: res.site.bcr, far: res.site.far, roadWidth: res.site.roadWidth, rotationDeg: Math.round((res.site.rotation * 180) / Math.PI) },
     ...meta,
-    plans: plans.map(p => ({ id: p.id, use: p.use, size: p.size ?? null, title: p.title, subtitle: p.subtitle, metrics: p.metrics, buildings: p.buildings.map(b => ({ kind: b.kind, floors: b.floors, floorHeight: b.floorHeight, roof: b.roof, baseFloor: b.baseFloor ?? 0, widthM: +(b.u1 - b.u0).toFixed(2), depthM: +(b.v1 - b.v0).toFixed(2) })), ...promptFor(p) })),
+    exteriorStyle,
+    plans: plans.map(controlPlanSpec),
     views: manifest,
     notes: [
       "base.png: 白模型（影・周辺建物つき）。img2img の下絵",
