@@ -47,3 +47,34 @@ for (const style of ["white", "black", "wa"] as const) {
     }
   });
 }
+
+test("陸屋根：パラペットは縁の立ち上がりで、隣の棟に接する辺は作らない", () => {
+  const b: Box = { u0: 0, u1: 10, v0: 0, v1: 8, floors: 3, floorHeight: 3, roof: "flat", kind: "apartment" };
+  const spec = roofSpec(b, "white");
+  const full = createRoof(b, spec, materials);
+  const rimFull = (full.children[0] as THREE.Mesh).geometry.attributes.position.count;
+  const open = createRoof(b, spec, materials, (face) => face !== 1); // 右の辺は隣の棟
+  const rimOpen = (open.children[0] as THREE.Mesh).geometry.attributes.position.count;
+  assert.ok(rimOpen < rimFull, "接している辺の立ち上がりが減る");
+  // 屋根全体を覆う箱ではない：立ち上がりの中央（屋上の真ん中）に形がない
+  const rim = new THREE.Box3().setFromObject(full.children[0]);
+  assert.ok(rim.max.x - rim.min.x >= 10 - 1e-6);
+  const pos = (full.children[0] as THREE.Mesh).geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++) assert.ok(Math.abs(pos.getX(i)) > 5 - 0.16 - 1e-6 || Math.abs(pos.getZ(i)) > 4 - 0.16 - 1e-6, "立ち上がりは縁だけ");
+});
+
+test("切妻：妻壁は壁の位置に壁の材料で立ち、瓦の列は棟の方向（u）にそろう", () => {
+  const wall = new THREE.MeshBasicMaterial();
+  const b: Box = { u0: 0, u1: 10, v0: 0, v1: 6, floors: 2, floorHeight: 3, roof: "gable", kind: "house" };
+  const spec = roofSpec(b, "white");
+  const g = createRoof(b, spec, { ...materials, wall });
+  const walls = g.children.filter(o => (o as THREE.Mesh).material === wall);
+  assert.equal(walls.length, 2);
+  for (const w of walls) { const bb = new THREE.Box3().setFromObject(w); near(Math.abs(bb.max.x), 5); near(bb.max.z - bb.min.z, 6); }
+  const roof = g.children[0] as THREE.Mesh, geo = roof.geometry, uv = geo.attributes.uv, pos = geo.attributes.position;
+  const side = geo.groups.find(gr => gr.materialIndex === 1)!;
+  // 棟の方向（回転後の x）に沿って u が実寸で増える
+  let checked = 0;
+  for (let i = side.start; i < side.start + side.count; i++) { near(uv.getX(i), pos.getX(i)); checked++; }
+  assert.ok(checked > 0);
+});

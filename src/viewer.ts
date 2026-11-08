@@ -109,6 +109,8 @@ export class Viewer {
       c.addPass(new OutputPass());
       this.composer = c;
     }
+    // 比較・計測用（?debug3d のときだけ）：三角形数・描画回数を読めるようにする
+    if (/[?&]debug3d\b/.test(location.search)) (window as unknown as { __viewer: Viewer }).__viewer = this;
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(el);
     this.resize();
@@ -363,6 +365,13 @@ export class Viewer {
   }
 
   getStyle(): ExteriorStyle { return this.style; }
+  /** 計測用：直前の描画の三角形数・描画回数と、建物部分の三角形数 */
+  stats() {
+    let planTris = 0;
+    this.planGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) { const g = m.geometry; planTris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
+    const r = this.renderer.info.render;
+    return { triangles: r.triangles, calls: r.calls, planTris: Math.round(planTris) };
+  }
 
   setPlan(plan: Plan, rotation = 0) {
     plan = applyExteriorStyle(plan, plan.exteriorStyle ?? this.style);
@@ -372,7 +381,7 @@ export class Viewer {
     clear(this.planGroup);
     this.planGroup.rotation.y = rotation; // (s,t) 系を (u,v) 系へ
     const pal = PALETTES[this.style];
-    for (const b of plan.buildings) this.planGroup.add(building(b, pal, this.style));
+    for (const b of plan.buildings) this.planGroup.add(building(b, pal, this.style, plan.buildings));
     // 玄関から道路までのコンクリートの通路（道路に出られる向きのときだけ）
     for (const b of plan.buildings) {
       if ((b.baseFloor ?? 0) !== 0 || b.kind === "store") continue;
@@ -497,7 +506,8 @@ function texMat(key: TexKey, color: number, normalScale = 0.8, side: THREE.Side 
   let m = matCache.get(id);
   if (!m) {
     m = new THREE.MeshStandardMaterial({ map: tex(key, "diff"), normalMap: tex(key, "nor"), normalScale: new THREE.Vector2(normalScale, normalScale), side, roughness: key === "wall_metal" ? 0.55 : 0.92, metalness: 0 });
-    // 質感の画像は暗めなので、色味に明るさの倍率を掛けて持ち上げる（1を超えてよい）
+    // 質感の画像は暗めなので、色味に明るさの倍率を掛けて持ち上げる（1を超えてよい）。
+    // コンクリートの画像は平均が約0.45（sRGB）と特に暗く、縦の面では倍率2.4〜3が要る（塀や基礎が黒く見えていた）
     m.color.setHex(color).multiplyScalar(gain);
     matCache.set(id, m);
   }
@@ -570,7 +580,7 @@ const PALETTES: Record<ExteriorStyle, Palette> = {
   white: { gain: 1.85, roofGain: 1.4, wall: 0xf8f7f3, apartment: 0xf3f3ef, store: 0xeef3f5, edge: 0x9aa3a0, roof: 0x5f6468, parapet: 0xe3e5e0, win: 0x5a7686, frame: 0x8d9497, accent: 0xa77c55, band: false,
     wallTex: "wall_siding_v", aptTex: "wall_siding_v", storeTex: "wall_plaster", roofTex: "roof_kawara", tint: 0xffffff, roofTint: 0xc8ccd0, accentTex: "wall_wood", accentTint: 0xd9b48c },
   // ブラック：金属の縦波板（ガルバ風）＋黒い屋根＋木の差し色
-  black: { gain: 1.0, roofGain: 1.0, wall: 0x2f3336, apartment: 0x34383b, store: 0x303437, edge: 0x5b6266, roof: 0x222528, parapet: 0x3a3f43, win: 0x4f6573, frame: 0x1c1f21, accent: 0xb3875a, band: false,
+  black: { gain: 1.4, roofGain: 1.15, wall: 0x2f3336, apartment: 0x34383b, store: 0x303437, edge: 0x5b6266, roof: 0x222528, parapet: 0x3a3f43, win: 0x4f6573, frame: 0x1c1f21, accent: 0xb3875a, band: false,
     wallTex: "wall_metal", aptTex: "wall_metal", storeTex: "wall_metal", roofTex: "roof_kawara", tint: 0x8a9096, roofTint: 0x5a5f64, accentTex: "wall_wood", accentTint: 0xe0b98e },
 };
 const CAR_COLORS = [0xf4f4f2, 0x9ea6ab, 0x2f3a4a, 0x7a2e2e, 0x1f2326];
@@ -654,22 +664,20 @@ function exterior(P: [number, number][], roads: [number, number][][]): THREE.Gro
     }
   }
   if (wallGeo.length) {
-    const wall = new THREE.Mesh(mergeGeometries(wallGeo.map(x => x.toNonIndexed())), texMat("ground_concrete", 0xdad8d2, 0.6, THREE.FrontSide, 1.45));
+    const wall = new THREE.Mesh(mergeGeometries(wallGeo.map(x => x.toNonIndexed())), texMat("ground_concrete", 0xe6e4de, 0.5, THREE.FrontSide, 3.0));
     wall.castShadow = true; wall.receiveShadow = true; g.add(wall);
   }
   return g;
 }
 
-function building(b: Box, pal: Palette, style: ExteriorStyle): THREE.Group {
+function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly Box[] = []): THREE.Group {
   const g = new THREE.Group();
   const w = b.u1 - b.u0, d = b.v1 - b.v0, h = b.floors * b.floorHeight, fh = b.floorHeight;
   const y0 = (b.baseFloor ?? 0) * fh;
   const cx = (b.u0 + b.u1) / 2, cz = -(b.v0 + b.v1) / 2;
   const onGround = y0 === 0;
   const wallTex = b.kind === "house" ? pal.wallTex : b.kind === "apartment" ? pal.aptTex : pal.storeTex;
-  const body = new THREE.Mesh(meterUVBox(w, h, d), texMat(wallTex, pal.tint, 0.8, THREE.FrontSide, pal.gain));
-  body.position.set(cx, y0 + h / 2, cz); body.castShadow = true; body.receiveShadow = true;
-  g.add(body);
+  const wallMat = texMat(wallTex, pal.tint, 0.8, THREE.FrontSide, pal.gain);
   const accent = texMat(pal.accentTex, pal.accentTint, 0.6, THREE.FrontSide, 1.1);
   const trimMat = new THREE.MeshStandardMaterial({ color: pal.parapet, roughness: 0.7 });
   const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
@@ -687,63 +695,134 @@ function building(b: Box, pal: Palette, style: ExteriorStyle): THREE.Group {
 
   // 基礎：地面から0.45mのコンクリート（外壁より少し外へ出す）
   const baseH = onGround && b.kind !== "store" ? 0.45 : 0;
-  if (baseH) put(texMat("ground_concrete", 0xd9d7d2, 0.4, THREE.FrontSide, 1.15), meterUVBox(w + 0.06, baseH, d + 0.06), cx, baseH / 2, cz);
+  if (baseH) put(texMat("ground_concrete", 0xdedcd6, 0.4, THREE.FrontSide, 2.6), meterUVBox(w + 0.06, baseH, d + 0.06), cx, baseH / 2, cz);
   // 和風：1階の腰板と、各階の上の庇
-  if (pal.band && onGround && b.kind !== "store") put(accent, meterUVBox(w + 0.04, 0.55, d + 0.04), cx, baseH + 0.275, cz);
   for (let f = 1; f < b.floors; f++) {
     const y = y0 + f * fh;
     if (pal.band) put(new THREE.MeshStandardMaterial({ color: pal.roof }), box(w + 1.0, 0.12, d + 1.0), cx, y, cz);
     else put(trimMat, box(w + 0.06, 0.14, d + 0.06), cx, y, cz); // 幕板（階の境目の帯）
   }
 
-  // 窓：枠（少し出っ張る）・ガラス（壁より奥）・水切り。face は外向きの向き（0=正面 +z, 1=右 +x, 2=裏 -z, 3=左 -x）
+  // 窓と玄関は壁に本当の開口を開け、奥行き（見込み）の中にサッシ・ガラス・カーテン・室内の暗さを入れる。
+  // face は外向きの向き（0=正面 +z, 1=右 +x, 2=裏 -z, 3=左 -x）。t はその面を外から見て左端からの距離
   const faceRot = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
-  const faceAt = (face: number, t: number): [number, number] => // t：その面の左端からの距離
+  const faceAt = (face: number, t: number): [number, number] =>
     face === 0 ? [b.u0 + t, -b.v0] : face === 1 ? [b.u1, -(b.v0 + t)] : face === 2 ? [b.u1 - t, -b.v1] : [b.u0, -(b.v1 - t)];
-  const addWin = (face: number, t: number, y: number, ww: number, wh: number) => {
-    const [x, z] = faceAt(face, t), r = faceRot[face], F = 0.06, D = 0.07;
-    const at = (lx: number, ly: number, lz: number, mat: THREE.Material, geo: THREE.BufferGeometry) => {
-      const c = Math.cos(r), sn = Math.sin(r); // 面の向きに回して、外へ lz だけ出す
-      put(mat, geo, x + lx * c + lz * sn, y + ly, z - lx * sn + lz * c, r);
-    };
-    // 奥から：室内の暗さ → レースのカーテン（両端に寄せる）→ 空を映す半透明のガラス
-    at(0, 0, 0.012, roomMat, new THREE.PlaneGeometry(ww, wh));
-    const cw = ww * (0.22 + ((t * 7.3 + y * 3.1) % 1) * 0.14); // 窓ごとに少しずつ開け具合を変える
-    at(-ww / 2 + cw / 2, 0, 0.02, curtainMat, new THREE.PlaneGeometry(cw, wh));
-    at(ww / 2 - cw / 2, 0, 0.02, curtainMat, new THREE.PlaneGeometry(cw * 0.8, wh));
-    at(0, 0, 0.035, winMat, new THREE.PlaneGeometry(ww, wh));
-    if (ww > 0.9) at(0, 0, D / 2, frameMat, box(F * 0.8, wh, D * 0.8)); // 引き違い窓の召し合わせ
-    at(0, wh / 2 + F / 2, D / 2, frameMat, box(ww + 2 * F, F, D));
-    at(0, -wh / 2 - F / 2, D / 2, frameMat, box(ww + 2 * F, F, D));
-    at(-ww / 2 - F / 2, 0, D / 2, frameMat, box(F, wh, D));
-    at(ww / 2 + F / 2, 0, D / 2, frameMat, box(F, wh, D));
-    at(0, -wh / 2 - F - 0.025, 0.06, frameMat, box(ww + 0.24, 0.04, 0.12)); // 水切り
+  const faceLen = (face: number) => (face % 2 === 0 ? w : d);
+  // ほかの棟に接している（隠れている）場所か：面の0.1m外側の点が、別の棟の中に入るか。
+  // L字・コの字・段状で、隣の棟に埋もれる窓・バルコニー・屋上の立ち上がりを作らないために使う
+  const OUT: [number, number][] = [[0, 0.1], [0.1, 0], [0, -0.1], [-0.1, 0]];
+  const covered = (face: number, t: number, y: number) => {
+    const [x, z] = faceAt(face, t), u = x + OUT[face][0], v = -(z + OUT[face][1]);
+    return others.some(o => o !== b && u > o.u0 && u < o.u1 && v > o.v0 && v < o.v1
+      && y > (o.baseFloor ?? 0) * o.floorHeight && y < ((o.baseFloor ?? 0) + o.floors) * o.floorHeight);
   };
+  /** 面の座標（lx：面に沿って右、ly：上、lz：外向き）で置く */
+  const onFace = (face: number, t: number, y: number, lx: number, ly: number, lz: number, mat: THREE.Material, geo: THREE.BufferGeometry) => {
+    const [x, z] = faceAt(face, t), r = faceRot[face], c = Math.cos(r), sn = Math.sin(r);
+    put(mat, geo, x + lx * c + lz * sn, y + ly, z - lx * sn + lz * c, r);
+  };
+  const plane = (pw: number, ph: number) => { // UV を実寸（m）にした板
+    const geo = new THREE.PlaneGeometry(pw, ph), uv = geo.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * pw, uv.getY(i) * ph);
+    return geo;
+  };
+  type Opening = { face: number; t: number; yc: number; W: number; H: number; ww: number; wh: number; door?: boolean };
+  const openings: Opening[] = [];
   const store = b.kind === "store";
+  const F = 0.05;          // サッシの枠の見付け
+  const DEPTH = 0.14;      // 壁の見込み（開口の奥行き）
+  let doorAt: { t: number; W: number } | null = null;
+  if (b.kind === "house" && onGround) {
+    const nU = Math.max(1, Math.floor(w / 2.4));
+    const t = nU > 1 ? 0.5 * (w / nU) : 0.9;
+    doorAt = { t, W: 1.0 };
+    openings.push({ face: 0, t, yc: baseH + 1.06, W: 1.0, H: 2.12, ww: 0.92, wh: 2.06, door: true });
+  }
   for (let f = 0; f < b.floors; f++) {
     const fy = y0 + f * fh;
     const wh = store ? fh * 0.7 : fh * 0.42;
     const yc = fy + (store ? wh / 2 + 0.2 : fh * 0.58);
     for (let face = 0; face < 4; face++) {
-      const len = face % 2 === 0 ? w : d;
+      const len = faceLen(face);
       const pitch = store && face === 0 ? 3 : face === 0 ? 2.4 : face === 2 ? 3.2 : 3.4; // 正面は多め、裏と横は少なめ
       const n = Math.max(1, Math.floor(len / pitch));
       for (let i = 0; i < n; i++) {
-        // 戸建ての1階の正面左端は玄関ドアにする
-        if (b.kind === "house" && f === 0 && onGround && face === 0 && i === 0 && n > 1) continue;
-        // 集合住宅の裏は共用廊下なので、窓は小さめ
+        if (doorAt && f === 0 && face === 0 && i === 0 && n > 1) continue; // 1階正面の左端は玄関
         const ww = (len / n) * (store && face === 0 ? 0.8 : face === 0 ? 0.45 : 0.36);
-        const hh = b.kind === "apartment" && face === 2 && f > 0 ? wh * 0.55 : wh;
-        addWin(face, (i + 0.5) * (len / n), b.kind === "apartment" && face === 2 && f > 0 ? fy + fh * 0.72 : yc, ww, hh);
+        const back = b.kind === "apartment" && face === 2 && f > 0; // 集合住宅の裏（共用廊下側）は小窓
+        const hh = back ? wh * 0.55 : wh;
+        openings.push({ face, t: (i + 0.5) * (len / n), yc: back ? fy + fh * 0.72 : yc, W: ww + 2 * F, H: hh + 2 * F, ww, wh: hh });
       }
     }
   }
-  if (b.kind === "house" && onGround) {
-    const nU = Math.max(1, Math.floor(w / 2.4));
-    const dx = nU > 1 ? b.u0 + 0.5 * (w / nU) : b.u0 + 0.9;
-    put(accent, new THREE.PlaneGeometry(0.95, 2.05), dx, baseH + 1.03, -b.v0 + 0.04);
+  for (const o of openings) if ([0, -o.W / 2, o.W / 2].some(dt => covered(o.face, o.t + dt, o.yc))) o.W = 0;
+  // 壁：面ごとに穴を開けた板。開口が壁の端や上下にはみ出すものは開けない
+  const walls: THREE.BufferGeometry[] = [];
+  for (let face = 0; face < 4; face++) {
+    const len = faceLen(face);
+    const shape = new THREE.Shape([new THREE.Vector2(0, y0), new THREE.Vector2(len, y0), new THREE.Vector2(len, y0 + h), new THREE.Vector2(0, y0 + h)]);
+    for (const o of openings) {
+      if (o.face !== face) continue;
+      const x1 = o.t - o.W / 2, x2 = o.t + o.W / 2, yb = o.yc - o.H / 2, yt = o.yc + o.H / 2;
+      if (!o.W || x1 < 0.05 || x2 > len - 0.05 || yb < y0 + 0.02 || yt > y0 + h - 0.05) { o.W = 0; continue; }
+      shape.holes.push(new THREE.Path([new THREE.Vector2(x1, yb), new THREE.Vector2(x1, yt), new THREE.Vector2(x2, yt), new THREE.Vector2(x2, yb)]));
+    }
+    const geo = new THREE.ShapeGeometry(shape); // UV は形の座標＝実寸（m）
+    const [x, z] = faceAt(face, 0);
+    geo.rotateY(faceRot[face]); geo.translate(x, 0, z);
+    walls.push(geo);
+  }
+  walls.push(plane(w, d).rotateX(-Math.PI / 2).translate(cx, y0 + h, cz)); // 天面（屋根やパラペットの下）
+  const body = new THREE.Mesh(mergeGeometries(walls.map(x => x.index ? x.toNonIndexed() : x)), wallMat);
+  body.castShadow = true; body.receiveShadow = true; g.add(body);
+
+  const doorMat = accent;
+  for (const o of openings) {
+    if (!o.W) continue;
+    const { face, t, yc, W, H } = o;
+    // 開口の内側の4面（見込み）：上・下・左・右
+    onFace(face, t, yc, 0, H / 2, -DEPTH / 2, wallMat, plane(W, DEPTH).rotateX(Math.PI / 2));
+    onFace(face, t, yc, 0, -H / 2, -DEPTH / 2, wallMat, plane(W, DEPTH).rotateX(-Math.PI / 2));
+    onFace(face, t, yc, -W / 2, 0, -DEPTH / 2, wallMat, plane(DEPTH, H).rotateY(Math.PI / 2));
+    onFace(face, t, yc, W / 2, 0, -DEPTH / 2, wallMat, plane(DEPTH, H).rotateY(-Math.PI / 2));
+    if (o.door) {
+      onFace(face, t, yc, 0, 0, -0.07, doorMat, box(W - 0.08, H - 0.04, 0.04));      // 扉
+      onFace(face, t, yc, W / 2 - 0.16, 0, -0.04, frameMat, box(0.03, 0.4, 0.05));    // 取っ手
+      continue;
+    }
+    const { ww, wh } = o;
+    // 奥から：室内の暗さ（開口をふさぐ）→ レースのカーテン → 半透明のガラス → サッシの枠
+    onFace(face, t, yc, 0, 0, -DEPTH + 0.005, roomMat, new THREE.PlaneGeometry(W, H));
+    const cw = ww * (0.22 + ((t * 7.3 + yc * 3.1) % 1) * 0.14); // 窓ごとに少しずつ開け具合を変える
+    onFace(face, t, yc, -ww / 2 + cw / 2, 0, -0.11, curtainMat, new THREE.PlaneGeometry(cw, wh));
+    onFace(face, t, yc, ww / 2 - cw * 0.4, 0, -0.11, curtainMat, new THREE.PlaneGeometry(cw * 0.8, wh));
+    onFace(face, t, yc, 0, 0, -0.065, winMat, new THREE.PlaneGeometry(ww, wh));
+    const FD = 0.07, fz = -0.06;
+    onFace(face, t, yc, 0, H / 2 - F / 2, fz, frameMat, box(W, F, FD));
+    onFace(face, t, yc, 0, -H / 2 + F / 2, fz, frameMat, box(W, F, FD));
+    onFace(face, t, yc, -W / 2 + F / 2, 0, fz, frameMat, box(F, H - 2 * F, FD));
+    onFace(face, t, yc, W / 2 - F / 2, 0, fz, frameMat, box(F, H - 2 * F, FD));
+    if (ww > 0.9) onFace(face, t, yc, 0, 0, fz, frameMat, box(F * 0.9, wh, FD * 0.8)); // 引き違い窓の召し合わせ
+    onFace(face, t, yc, 0, -H / 2 - 0.018, 0.035, frameMat, box(W + 0.16, 0.035, 0.09)); // 外の水切り
+  }
+  // 和風の腰板：面ごとの帯。玄関の前は空ける
+  if (pal.band && onGround && b.kind !== "store") {
+    for (let face = 0; face < 4; face++) {
+      const len = faceLen(face), gaps: [number, number][] = [];
+      if (face === 0 && doorAt) gaps.push([doorAt.t - doorAt.W / 2, doorAt.t + doorAt.W / 2]);
+      let s0 = -0.04;
+      for (const [g0, g1] of [...gaps, [len + 0.04, len + 0.04] as [number, number]]) {
+        if (g0 - s0 > 0.05) onFace(face, (s0 + g0) / 2, baseH + 0.275, 0, 0, 0.02, accent, meterUVBox(g0 - s0, 0.55, 0.04));
+        s0 = g1;
+      }
+    }
+  }
+  if (doorAt && !openings.some(o => o.door && o.W)) doorAt = null;
+  if (doorAt) {
+    const dx = b.u0 + doorAt.t;
     put(frameMat, box(1.4, 0.1, 0.9), dx, baseH + 2.35, -b.v0 + 0.45); // 玄関の小さな庇
-    put(texMat("ground_concrete", 0xcfcdc8, 0.4, THREE.FrontSide, 1.1), box(1.6, baseH, 1.0), dx, baseH / 2, -b.v0 + 0.5); // 玄関ポーチ
+    put(texMat("ground_concrete", 0xdedcd6, 0.4, THREE.FrontSide, 2.4), meterUVBox(1.6, baseH, 1.0), dx, baseH / 2, -b.v0 + 0.5); // 玄関ポーチ
   }
   // バルコニー：戸建ては2階正面の一部、集合住宅は2階以上の正面いっぱい。裏は共用廊下の手すり
   // 手すりは半透明のパネル＋細い笠木（重たい箱に見えないように）
@@ -761,12 +840,13 @@ function building(b: Box, pal: Palette, style: ExteriorStyle): THREE.Group {
   };
   if (b.kind === "house" && b.floors >= 2 && w >= 4) {
     const bw = Math.min(w * 0.55, 4.5);
-    balcony(y0 + fh, b.u1 - bw - 0.3, b.u1 - 0.3, 0.9);
+    if (![0.4, bw / 2, bw - 0.1].some(dt => covered(0, w - 0.3 - dt, y0 + fh + 0.5))) balcony(y0 + fh, b.u1 - bw - 0.3, b.u1 - 0.3, 0.9);
   }
   if (b.kind === "apartment") {
     for (let f = onGround ? 1 : 0; f < b.floors; f++) {
       const y = y0 + f * fh;
-      balcony(y, b.u0 + 0.2, b.u1 - 0.2, 1.0);
+      if (![0.3, w / 2, w - 0.3].some(t => covered(0, t, y + 0.5))) balcony(y, b.u0 + 0.2, b.u1 - 0.2, 1.0);
+      if ([0.3, w / 2, w - 0.3].some(t => covered(2, t, y + 0.5))) continue;
       put(new THREE.MeshStandardMaterial({ color: 0x3a4044, roughness: 0.9 }), new THREE.PlaneGeometry(w - 0.4, fh - 1.25), cx, y + 1.1 + (fh - 1.25) / 2, -b.v1 - 0.012, Math.PI); // 廊下の奥の影
       put(trimMat, box(w - 0.2, 1.1, 0.12), cx, y + 0.55, -b.v1 - 0.06);
     }
@@ -779,7 +859,9 @@ function building(b: Box, pal: Palette, style: ExteriorStyle): THREE.Group {
     surface: texMat(pal.roofTex, pal.roofTint, 1.0, THREE.DoubleSide, pal.roofGain),
     trim: trimMat, gutter: gutterMat,
     coping: pal.band ? new THREE.MeshStandardMaterial({ color: pal.roof }) : frameMat,
-  }));
+    membrane: texMat("ground_concrete", 0xb4c8f0, 0.5, THREE.FrontSide, 1.45),
+    wall: wallMat, // 屋上の防水面（灰色）
+  }, (face, t) => !covered(face, t, spec.baseY + spec.parapetHeight / 2)));
   for (const [mat, list] of parts) {
     const m = new THREE.Mesh(mergeGeometries(list.map(x => x.index ? x.toNonIndexed() : x)), mat);
     m.castShadow = true; m.receiveShadow = true; g.add(m);
