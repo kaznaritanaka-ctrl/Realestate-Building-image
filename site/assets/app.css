@@ -395,6 +395,14 @@ fieldset.cards .choice-card:has(input:checked)::before { border-color: var(--acc
 .pv-lot label { font-weight: 700; font-size: .9rem; }
 .pv-lot input { flex: 0 1 220px; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; }
 .pv-lot small { flex-basis: 100%; color: #5b6b6b; }
+.pv-lot .privacy-note { flex-basis: 100%; margin: 2px 0 0; }
+/* 個人情報の扱いの注記：鍵のアイコンつきで、入力欄のすぐ下に目立つように */
+.privacy-note { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 4px; padding: 8px 10px; border-radius: 8px;
+  background: #eef7f3; border: 1px solid #cfe6dc; color: #24453b; font-size: .82rem; line-height: 1.55; }
+.privacy-note svg { flex: none; width: 18px; height: 18px; margin-top: 1px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.privacy-note b { color: var(--accent); }
+.privacy-note a { margin-left: 4px; color: var(--accent); }
+body.has-results .privacy-note#search-privacy { display: none; }
 .pv-lot[hidden] { display: none; }
 .pv-memo { max-width: 1120px; margin: 0 auto 12px; padding: 0 12px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; }
 .pv-memo[hidden] { display: none; }
