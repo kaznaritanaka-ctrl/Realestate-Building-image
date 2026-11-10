@@ -1,4 +1,4 @@
-import type { EngineResult, Plan } from "../engine/engine.ts";
+import { costBasisText, type EngineResult, type Plan } from "../engine/engine.ts";
 import type { SiteInfo } from "./siteinfo.ts";
 
 // A4横・3ページ固定の相談準備レポート。入力・描画はブラウザ内で完結し、PDFをサーバーへ送らない。
@@ -37,7 +37,8 @@ function renderPlan(p: Plan, image: string | undefined): string {
     : "駐車" + m.parking + "台";
   return '<section class="rp-card rp-plan"><div class="rp-card-title"><strong>' + html(p.title) + '</strong><span>' + html(summary) + '</span></div>' +
     (image ? '<img src="' + html(image) + '" alt="' + html(p.title) + 'の参考3Dイメージ">' : '<p class="rp-missing">画像未取得</p>') +
-    '<div class="rp-card-meta"><span>' + html(p.subtitle) + '</span><span>概算工事費 ' + html(money(m.costMin)) + '〜' + html(money(m.costMax)) + '</span></div></section>';
+    '<div class="rp-card-meta"><span>' + html(p.subtitle) + '</span><span>概算工事費 ' + html(money(m.costMin)) + '〜' + html(money(m.costMax)) + '</span></div>' +
+    '<p class="rp-fine">' + html(costBasisText(p, true)) + '</p></section>';
 }
 
 export function buildSiteReport({ result, info, images, isSample, preparedAt, styleName, center, mapImage, sitePlan }: ReportInput): string {

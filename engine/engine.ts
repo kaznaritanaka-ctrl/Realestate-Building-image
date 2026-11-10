@@ -77,15 +77,42 @@ const ROAD_SETBACK = 1.0;  // 道路側の後退（アプローチ・駐車の�
 const SIDE_SETBACK = 0.5;  // 隣地側（民法234条の目安）
 const WIDTH_M: Record<RoadWidthClass, number> = { lt4: 4, "4to6": 4, "6to12": 6, gte12: 12 };
 
-// 概算工事費の目安（万円/坪）。当サービスの暫定設定値（出典の整備は今後）
+// 概算工事費の目安（万円/坪）
+// 出典：国土交通省「建築着工統計調査」住宅着工統計 第34表（令和7年＝2025年計、全国計）の「1㎡あたり工事費予定額」。
+// ㎡単価（万円/㎡）に 3.30579 を掛けて坪単価に換算し、四捨五入した。区分ごとの対応：
+//   house     持家・一戸建        木造 26.1 〜 鉄骨造 36.8 万円/㎡
+//   rentalLow 貸家・共同住宅（3階以下） 木造 22.1 〜 鉄骨造 34.6 万円/㎡
+//   rentalMid 貸家・共同住宅（4階以上） SRC造 32.3 〜 RC造 35.1 万円/㎡
+// store と parkingPerSqm は当サービスの設定値（非住宅の統計表への差し替えは今後）。
 const COST = {
-  house: [80, 110],
-  rentalLow: [70, 100],   // 3階以下（木造・軽量鉄骨想定）
-  rentalMid: [100, 140],  // 4階以上（RC・重量鉄骨想定）
+  house: [86, 122],
+  rentalLow: [73, 114],
+  rentalMid: [107, 116],
   store: [60, 90],
   parkingPerSqm: [0.5, 1.0], // 万円/㎡（舗装・区画線）
 } as const;
 const TSUBO = 3.30579;
+
+/** 工事費単価の根拠。画面とレポートが同じ文言を出すための記述 */
+export const COST_BASIS = {
+  statSource: "国土交通省「建築着工統計調査」（2025年計）の1㎡あたり工事費予定額から算出",
+  statCaveat: "幅は構造の違いによる目安です。工事費予定額は着工時の届出額で、実際の工事費とは異なります。",
+  serviceSet: "店舗・駐車場の単価は当サービスの設定値です。",
+  /** 区分ごとの「（○○：…万円/坪）」の中身 */
+  ranges: {
+    house: `持家・一戸建：木造〜鉄骨造で${COST.house[0]}〜${COST.house[1]}万円/坪`,
+    rentalLow: `貸家・共同住宅：木造〜鉄骨造で${COST.rentalLow[0]}〜${COST.rentalLow[1]}万円/坪`,
+    rentalMid: `貸家・共同住宅：SRC造〜RC造で${COST.rentalMid[0]}〜${COST.rentalMid[1]}万円/坪`,
+  },
+} as const;
+
+/** 案ごとの根拠文。統計に基づく用途は出典と区分、店舗・駐車場は設定値の旨だけを返す（短縮版は注意書きを省く） */
+export function costBasisText(p: Pick<Plan, "use" | "metrics">, short = false): string {
+  if (p.use === "other") return COST_BASIS.serviceSet;
+  const range = p.use === "house" ? COST_BASIS.ranges.house
+    : p.metrics.floors >= 4 ? COST_BASIS.ranges.rentalMid : COST_BASIS.ranges.rentalLow;
+  return `単価の前提：${COST_BASIS.statSource}（${range}）。` + (short ? "" : COST_BASIS.statCaveat);
+}
 
 export function computePlans(input: SiteInput): EngineResult {
   const warnings: string[] = [];

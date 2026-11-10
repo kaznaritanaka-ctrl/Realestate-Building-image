@@ -1,5 +1,5 @@
 import maplibregl from "maplibre-gl";
-import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
+import { type BuildingShape, applyExteriorStyle, computePlans, costBasisText, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
@@ -942,7 +942,7 @@ function planHtml(p: Plan) {
   }
   if (m.units != null) rows.push(["賃貸住戸", `${m.units}戸（1K・約25㎡想定）`]);
   rows.push(["駐車", `${m.parking}台`]);
-  rows.push(["概算工事費", `約${yen(m.costMin)}〜${yen(m.costMax)}円`]);
+  rows.push(["概算工事費", `約${yen(m.costMin)}〜${yen(m.costMax)}円<small>${esc(costBasisText(p))}</small>`]);
   return `<div class="card plan">
     <h3>${esc(p.title)}</h3><p class="sub">${esc(p.subtitle)}</p>
     <table class="kv">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>
