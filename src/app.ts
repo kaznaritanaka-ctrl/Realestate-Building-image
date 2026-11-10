@@ -784,7 +784,9 @@ async function renderZone() {
       auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
-      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建ぺい率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
+      const bcrTxt = z.bcr != null ? `${z.bcr}％` : `${ZONES[state.zone].bcr}％（代表値で試算）`;
+      const farTxt = z.far != null ? `${z.far}％` : `${ZONES[state.zone].far}％（代表値で試算）`;
+      auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建ぺい率 ${bcrTxt}・容積率 ${farTxt}（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
       guess.hidden = true;
     } else {
       auto.classList.add("muted-card");
@@ -926,6 +928,8 @@ function renderResult() {
         <tr><th>階数の上限（目安）</th><td>${s.floorsCap}階</td></tr>
       </table>
       ${result.warnings.length ? `<ul class="warn">${result.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+      ${state.sample ? "" : `<p class="muted">敷地の範囲は地図上で入力した目安です。登記上の境界や測量結果ではありません。</p>`}
+      ${result.certainty.bcrFar === "reference" ? `<p class="muted">建ぺい率・容積率は用途地域の代表値で試算しています。実際の指定値は自治体の都市計画でご確認ください。</p>` : ""}
       ${state.sample ? `<p class="muted">※サンプルの架空の敷地です。</p>` : ""}
       ${result.certainty.zone === "public" ? `<p class="muted credit">${CREDIT}</p>` : ""}
     </details>`;

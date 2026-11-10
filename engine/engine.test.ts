@@ -50,6 +50,18 @@ test("L字型の敷地でも建物が敷地内・後退距離内に収まる", (
   }
 });
 
+test("公的データに率が含まれる場合だけ bcrFar=public、欠ければ代表値（reference）で試算する", () => {
+  const withRates = computePlans({ polygon: rect(10, 20), roadEdges: [{ index: 0, width: "4to6" }], zone: "r1", zoneSource: "api", bcr: 60, far: 300 });
+  assert.equal(withRates.certainty.zone, "public");
+  assert.equal(withRates.certainty.bcrFar, "public");
+  assert.equal(withRates.site.far, 300);
+  const noRates = computePlans({ polygon: rect(10, 20), roadEdges: [{ index: 0, width: "4to6" }], zone: "r1", zoneSource: "api" });
+  assert.equal(noRates.certainty.zone, "public");
+  assert.equal(noRates.certainty.bcrFar, "reference");
+  assert.equal(noRates.site.bcr, 60); // 第一種住居地域の代表値
+  assert.equal(noRates.site.far, 200);
+});
+
 test("接道なしは警告を出す", () => {
   const r = computePlans({ polygon: rect(10, 10), roadEdges: [], zone: "r1" });
   assert.ok(r.warnings.some(w => w.includes("接道")));

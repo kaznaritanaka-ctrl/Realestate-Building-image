@@ -286,8 +286,9 @@ export function computePlans(input: SiteInput): EngineResult {
       shape: "user",
       zone: input.zone === "unknown" ? "unknown" : input.zoneSource === "api" ? "public" : input.zoneSource === "guess" ? "guess" : "user",
       bcrFar: input.zone === "unknown" && input.bcr == null && input.far == null ? "unknown"
-        : input.zoneSource === "api" ? "public"
-        : input.bcr != null || input.far != null ? "user"
+        // 公的データに率そのものが含まれていた場合だけ public。api でも率が欠けていれば代表値で試算するので reference
+        : input.zoneSource === "api" && input.bcr != null && input.far != null ? "public"
+        : input.zoneSource !== "api" && (input.bcr != null || input.far != null) ? "user"
         : input.zoneSource === "guess" ? "guess" : "reference",
       road: roadEdges.length ? "user" : "unknown",
     },
