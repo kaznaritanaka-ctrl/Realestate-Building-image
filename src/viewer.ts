@@ -413,7 +413,7 @@ export class Viewer {
         if (!inPoly(this.sitePoly, x, -z)) { const [x2, z2] = wx(dx, z0 + d + 1); toRoad = this.roadsUV.some(R => inPoly(R, x2, -z2)); len = d; break; }
       }
       if (!toRoad || len < 0.5) continue;
-      const path = new THREE.Mesh(meterUVBox(1.2, 0.04, len), texMat("ground_concrete", 0xffffff, 0.5, THREE.FrontSide, 1.25));
+      const path = new THREE.Mesh(meterUVBox(1.2, 0.04, len), tileMat());
       path.position.set(dx, 0.03, z0 + len / 2); path.receiveShadow = true;
       this.planGroup.add(path);
     }
@@ -672,6 +672,25 @@ function inPoly(P: [number, number][], u: number, v: number): boolean {
   }
   return c;
 }
+// タイル風の床（30cm角・目地つき）。通路と玄関ポーチに使う。画像ファイルは使わず、その場で描く
+let tileMaterial: THREE.MeshStandardMaterial | null = null;
+function tileMat(): THREE.MeshStandardMaterial {
+  if (tileMaterial) return tileMaterial;
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#8f8a82"; g.fillRect(0, 0, 256, 256); // 目地
+  let seed = 11; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let r = 0; r < 4; r++) for (let q = 0; q < 4; q++) {
+    const k = 188 + Math.floor(rnd() * 22);
+    g.fillStyle = `rgb(${k + 4},${k},${k - 8})`; g.fillRect(q * 64 + 1.5, r * 64 + 1.5, 61, 61);
+    for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? 60 : 255},${rnd() < 0.5 ? 60 : 255},${rnd() < 0.5 ? 50 : 240},0.05)`; g.fillRect(q * 64 + 2 + rnd() * 58, r * 64 + 2 + rnd() * 58, 3, 2); }
+  }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 1.2, 1 / 1.2); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  tileMaterial = new THREE.MeshStandardMaterial({ map: t, roughness: 0.55 });
+  tileMaterial.color.setScalar(1.25);
+  return tileMaterial;
+}
+
 // ブロック塀の材質：明るい灰色のブロック（39×19cm）を馬目地に積んだ模様を、その場で描く
 let blockMaterial: THREE.MeshStandardMaterial | null = null;
 function blockMat(): THREE.MeshStandardMaterial {
@@ -742,7 +761,6 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
   const winMat = reflective(new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.05, metalness: 0, envMapIntensity: 1.8, transparent: true, opacity: 0.55, depthWrite: false })); // ガラスは空を映す
   const roomMat = new THREE.MeshStandardMaterial({ color: 0x1e2428, roughness: 1 });
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff1cc, emissive: 0xffd88a, emissiveIntensity: 0.9, roughness: 0.6 });
   const curtainMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 1 });
   // 細かい部品は材質ごとに1つの形にまとめて描く（部品が多くても重くならないように）
   const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
@@ -810,8 +828,14 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
       for (let i = 0; i < n; i++) {
         if (doorAt && f === 0 && face === 0 && i === 0 && n > 1) continue; // 1階正面の左端は玄関
         let ww = (len / n) * (store && face === 0 ? 0.8 : face === 0 ? 0.45 : 0.36);
-        const back = b.kind === "apartment" && face === 2 && f > 0; // 集合住宅の裏（共用廊下側）は小窓
+        const back = b.kind === "apartment" && face === 2; // 集合住宅の裏（共用廊下側）：住戸ごとに玄関ドアと小窓
         let hh = back ? wh * 0.55 : wh, y = back ? fy + fh * 0.72 : yc;
+        if (back) {
+          const bw = len / n, floorY = fy + (f === 0 && onGround ? baseH : 0.05);
+          openings.push({ face, t: (i + 0.3) * bw, yc: floorY + 1.0, W: 0.86, H: 2.0, ww: 0.8, wh: 1.96, door: true });
+          openings.push({ face, t: (i + 0.74) * bw, yc: y, W: 0.6 + 2 * F, H: 0.5 + 2 * F, ww: 0.6, wh: 0.5 });
+          continue;
+        }
         if (!store && face === 0 && fh >= 2.7) {
           // 正面は床近くまである掃き出し窓（幅も広め）。住宅の南面らしい大きな開口
           hh = 1.95; y = fy + (f === 0 ? Math.max(baseH, 0.3) : 0.3) + hh / 2 + 0.05; ww = Math.min((len / n) * 0.62, 1.9);
@@ -868,8 +892,9 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
     onFace(face, t, yc, -W / 2, 0, -DEPTH / 2, wallMat, plane(DEPTH, H).rotateY(Math.PI / 2));
     onFace(face, t, yc, W / 2, 0, -DEPTH / 2, wallMat, plane(DEPTH, H).rotateY(-Math.PI / 2));
     if (o.door) {
-      onFace(face, t, yc, 0, 0, -0.07, doorMat, box(W - 0.08, H - 0.04, 0.04));      // 扉
-      onFace(face, t, yc, W / 2 - 0.16, 0, -0.04, frameMat, box(0.03, 0.4, 0.05));    // 取っ手
+      // 住戸の玄関（裏面）は枠と同じ材質、取っ手は明るい色（材質を増やさず描画回数を抑える）
+      onFace(face, t, yc, 0, 0, -0.07, face === 2 ? frameMat : doorMat, box(W - 0.08, H - 0.04, 0.04));      // 扉
+      onFace(face, t, yc, W / 2 - 0.16, 0, -0.04, face === 2 ? curtainMat : frameMat, box(0.03, face === 2 ? 0.14 : 0.4, 0.05));    // 取っ手
       continue;
     }
     const { ww, wh } = o;
@@ -903,8 +928,8 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   if (doorAt) {
     const dx = b.u0 + doorAt.t;
     put(frameMat, box(1.4, 0.1, 0.9), dx, baseH + 2.35, -b.v0 + 0.45); // 玄関の小さな庇
-    put(lampMat, box(0.1, 0.22, 0.08), dx + 0.72, baseH + 1.75, -b.v0 + 0.05); // 玄関灯
-    put(texMat("ground_concrete", 0xdedcd6, 0.4, THREE.FrontSide, 2.4), meterUVBox(1.6, baseH, 1.0), dx, baseH / 2, -b.v0 + 0.5); // 玄関ポーチ
+    put(curtainMat, box(0.1, 0.22, 0.08), dx + 0.72, baseH + 1.75, -b.v0 + 0.05); // 玄関灯
+    put(tileMat(), meterUVBox(1.8, baseH, 1.2), dx, baseH / 2, -b.v0 + 0.6); // 玄関ポーチ（タイル）
   }
   if (store && onGround && !covered(0, w / 2, fh * 0.5)) {
     // 店舗：入口の上に看板の帯と、張り出したひさし
@@ -934,8 +959,9 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
       const y = y0 + f * fh;
       if (![0.3, w / 2, w - 0.3].some(t => covered(0, t, y + 0.5))) balcony(y, b.u0 + 0.2, b.u1 - 0.2, 1.0);
       if ([0.3, w / 2, w - 0.3].some(t => covered(2, t, y + 0.5))) continue;
-      put(new THREE.MeshStandardMaterial({ color: 0x3a4044, roughness: 0.9 }), new THREE.PlaneGeometry(w - 0.4, fh - 1.25), cx, y + 1.1 + (fh - 1.25) / 2, -b.v1 - 0.012, Math.PI); // 廊下の奥の影
-      put(trimMat, box(w - 0.2, 1.1, 0.12), cx, y + 0.55, -b.v1 - 0.06);
+      // 共用廊下：奥行き0.9mの床と、外側の手すり壁
+      put(trimMat, box(w, 0.16, 0.9), cx, y - 0.03, -b.v1 - 0.45);
+      put(trimMat, box(w, 1.1, 0.1), cx, y + 0.6, -b.v1 - 0.85);
     }
   }
 
