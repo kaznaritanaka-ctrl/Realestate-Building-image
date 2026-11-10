@@ -4,7 +4,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Box } from "../engine/engine.ts";
 import type { RoofSpec } from "../engine/roof.ts";
 
-interface RoofMaterials { surface: THREE.Material; trim: THREE.Material; gutter: THREE.Material; coping: THREE.Material; membrane?: THREE.Material; wall?: THREE.Material }
+interface RoofMaterials { surface: THREE.Material; trim: THREE.Material; gutter: THREE.Material; coping: THREE.Material; membrane?: THREE.Material; wall?: THREE.Material; ridge?: THREE.Material }
 /** 陸屋根のパラペットを置く辺の判定。face：0=正面(v0側) 1=右(u1側) 2=裏(v1側) 3=左(u0側)、t はその辺を外から見て左端からの距離。
  *  隣の棟が同じ高さ以上で接している辺は false にすると、屋上を横切る二重の立ち上がりができない */
 export type ParapetKeep = (face: number, t: number) => boolean;
@@ -60,6 +60,22 @@ export function createRoof(b: Box, spec: RoofSpec, materials: RoofMaterials, kee
   if (spec.kind === "hip") {
     put(hipRoof(L + eave * 2, S + eave * 2, rise), materials.surface);
     put(box(L + eave * 2, 0.16, S + eave * 2), materials.gutter, -0.08); // 軒裏（寄棟は四周に軒がある）
+    // 棟瓦：大棟（てっぺん）と四隅へ下りる隅棟に、丸い瓦の列を載せる
+    const hl = L / 2 + eave, hs = S / 2 + eave, r = Math.max(0, hl - hs);
+    const seg = (a: number[], b2: number[], rad: number) => {
+      const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b2), d = B.clone().sub(A), len = d.length();
+      const geo = new THREE.CylinderGeometry(rad, rad, len, 8);
+      geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+      return geo.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+    };
+    // 最高点は共通仕様（rise）を超えない：大棟は上面を rise に合わせた平たい帯、隅棟は少し下から始める
+    const caps: THREE.BufferGeometry[] = [];
+    if (r > 0.05) caps.push(box(2 * r + 0.3, 0.1, 0.42).translate(0, rise - 0.05, 0));
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const t = 0.1, x0 = sx * (r + (hl - r) * t), z0 = sz * hs * t, yy = rise * (1 - t);
+      caps.push(seg([x0, yy - 0.03, z0], [sx * hl, -0.03, sz * hs], 0.1));
+    }
+    put(mergeGeometries(caps), materials.ridge ?? materials.gutter);
   } else {
     // 切妻：厚み0.2mの「へ」の字の屋根板。端面は破風板の色、上面は屋根の質感
     const Se = S / 2 + eave, T = 0.2;
@@ -91,6 +107,7 @@ export function createRoof(b: Box, spec: RoofSpec, materials: RoofMaterials, kee
       tri.rotateY(sx > 0 ? Math.PI / 2 : -Math.PI / 2).translate(sx * L / 2, 0, 0); // 外向き
       const m = new THREE.Mesh(tri, materials.wall ?? materials.trim); m.castShadow = true; m.receiveShadow = true; g.add(m);
     }
+    put(box(L + eave * 2 + 0.04, 0.07, 0.36), materials.ridge ?? materials.gutter, rise - 0.035); // 棟包み（上面が最高点）（てっぺんの押さえ）
     // 軒裏：長い辺に沿った帯だけ
     for (const sz of [-1, 1]) put(box(L + eave * 2, 0.06, eave), materials.gutter, -0.03).position.z = sz * (S / 2 + eave / 2);
   }
