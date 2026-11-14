@@ -17,20 +17,64 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 
 // 自作の車モデル（前＝-Z、上＝+Y、原点＝地面の中央）。結果画面に入ったときに一度だけ読み込む
 const CAR_FILES = ["car_liftback_v2", "car_minivan_v1", "car_kei_v1"];
-let carModels: THREE.Object3D[] | null = null;
+// 車は読み込んだときに「つやのある部分・つやのない部分・ガラス・模様つき」の数個の形へまとめ直し、
+// 置くときは同じ車種をまとめて1回で描く（インスタンス描画）。元のモデルは部品10個・1台ごとに10回描いていた
+interface CarPart { geo: THREE.BufferGeometry; mat: THREE.Material }
+let carModels: CarPart[][] | null = null;
 let carLoading: Promise<void> | null = null;
+const CAR_SHINY = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.15 });
+const CAR_MATTE = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+CAR_SHINY.userData.env = true;
+function bakeCar(scene: THREE.Object3D): CarPart[] {
+  scene.updateMatrixWorld(true);
+  const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const own = new Map<string, THREE.Material>();
+  const add = (src: THREE.BufferGeometry, mx: THREE.Matrix4, m0: THREE.MeshStandardMaterial) => {
+    const g = (src.index ? src.toNonIndexed() : src.clone()).applyMatrix4(mx);
+    const n = g.attributes.position.count;
+    for (const k of Object.keys(g.attributes)) if (!["position", "normal", "uv"].includes(k)) g.deleteAttribute(k);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.uv) g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+    let target: THREE.Material;
+    if (m0.map || m0.transparent || m0.opacity < 1) {
+      // 模様つき（色見本の画像で塗り分けた部品）・ガラス：同じ画像・同じ設定の材質は1つにまとめる。重いクリアコートの計算は外す
+      const emissive = m0.emissiveMap || (m0.emissive && m0.emissive.getHex() !== 0) ? `${m0.emissiveMap?.uuid}|${m0.emissive.getHex()}|${m0.emissiveIntensity}` : "";
+      const key = [m0.map?.uuid, m0.roughnessMap?.uuid, m0.metalnessMap?.uuid, m0.normalMap?.uuid, m0.color.getHex(), m0.roughness, m0.metalness, m0.transparent, m0.opacity, m0.side, emissive].join("|");
+      let t = own.get(key);
+      if (!t) { t = new THREE.MeshStandardMaterial().copy(m0 as THREE.MeshStandardMaterial); t.userData = { env: true };
+        // 金属の度合いを抑える：全面が鏡になって庭の緑が映り込み、車体が黒緑に見えていた
+        if (!t.transparent) { const sm = t as THREE.MeshStandardMaterial; sm.metalness *= 0.3; sm.envMapIntensity = 0.7; }
+        own.set(key, t); }
+      target = t;
+    } else {
+      const c = m0.color.clone();
+      if (m0.emissive && m0.emissiveIntensity > 0) { c.r = Math.max(c.r, m0.emissive.r); c.g = Math.max(c.g, m0.emissive.g); c.b = Math.max(c.b, m0.emissive.b); }
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      target = m0.roughness < 0.5 || ((m0 as THREE.MeshPhysicalMaterial).clearcoat ?? 0) > 0 ? CAR_SHINY : CAR_MATTE;
+    }
+    (buckets.get(target) ?? buckets.set(target, []).get(target)!).push(g);
+  };
+  scene.traverse(o => {
+    const m = o as THREE.Mesh; if (!m.isMesh) return;
+    const mats = (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[];
+    const im = o as THREE.InstancedMesh, mx = new THREE.Matrix4();
+    const count = im.isInstancedMesh ? im.count : 1;
+    for (let i = 0; i < count; i++) {
+      if (im.isInstancedMesh) { im.getMatrixAt(i, mx); mx.premultiply(m.matrixWorld); } else mx.copy(m.matrixWorld);
+      add(m.geometry, mx, mats[0]);
+    }
+  });
+  const parts: CarPart[] = [];
+  for (const [mat, geos] of buckets) { applyEnv(mat); parts.push({ geo: mergeGeometries(geos), mat }); }
+  return parts;
+}
 function loadCars(): Promise<void> {
   if (carLoading) return carLoading;
   const loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/assets/draco/"));
-  carLoading = Promise.all(CAR_FILES.map(f => loader.loadAsync(`/assets/models/${f}.glb`).then(g => {
-    g.scene.traverse(o => {
-      const m = o as THREE.Mesh; if (!m.isMesh) return;
-      m.castShadow = true; m.receiveShadow = true;
-      for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) mat.userData.env = true;
-      applyEnv(m.material);
-    });
-    return g.scene;
-  }))).then(list => { carModels = list; }).catch(() => { carModels = []; /* 読み込めなければ箱の車のまま */ });
+  carLoading = Promise.all(CAR_FILES.map(f => loader.loadAsync(`/assets/models/${f}.glb`).then(g => bakeCar(g.scene))))
+    .then(list => { carModels = list; }).catch(() => { carModels = []; /* 読み込めなければ箱の車のまま */ });
   return carLoading;
 }
 
@@ -63,7 +107,8 @@ export class Viewer {
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     const coarse = matchMedia("(pointer: coarse)").matches;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1.5 : 2));
+    this.basePR = Math.min(window.devicePixelRatio, coarse ? 1.5 : 2);
+    this.renderer.setPixelRatio(this.basePR);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.autoUpdate = false;
     texListeners.add(() => this.requestRender(0, true)); // 質感の画像が届いたら描き直す
@@ -92,7 +137,7 @@ export class Viewer {
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e6, SUN); // 少し暖かい日差し
     sun.position.set(-40, 60, 30);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
+    sun.shadow.mapSize.set(coarse ? 2048 : 4096, coarse ? 2048 : 4096); // 影は形が変わったときだけ描くので、細かくしても操作中の負荷は増えない
     const sc = sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = sc.bottom = -60; sc.right = sc.top = 60; sc.far = 300;
     sun.shadow.radius = 3; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
@@ -118,7 +163,7 @@ export class Viewer {
     // 指を離したあとも、慣性の間とPLATEAUの読み込みのために少しだけ描き続ける
     this.controls.addEventListener("end", () => { this.busyUntil = performance.now() + (this.context ? 2000 : 300); });
     const lastPos = new THREE.Vector3(), lastTarget = new THREE.Vector3();
-    let lastMove = 0, lastFull = 0;
+    let lastMove = 0, lastFull = 0, lastFrame = 0, ema = 0, slowCount = 0, wasMoving = false;
     const loop = () => {
       this.raf = requestAnimationFrame(loop);
       if (this.anim) {
@@ -142,8 +187,14 @@ export class Viewer {
       // 動かしている間は隅の陰影（GTAO）を省いて軽く描き、止まったら陰影つきで描き直す。
       // 周辺建物の読み込み中など、止まったまま描き続けるときは陰影つきを0.4秒おきにする
       const moving = moved || !!this.anim || now - lastMove < 120;
-      const full = !this.composer || (!moving && (!busy || now - lastFull > 400));
-      if (full) { this.draw(); lastFull = now; this.aoPending = false; }
+      // 動かしている間のコマが遅い端末では、動いている間だけ解像度を下げる（止まったら元の解像度で描き直す）
+      if (moving) {
+        if (wasMoving) { ema = ema ? ema * 0.8 + (now - lastFrame) * 0.2 : now - lastFrame; if (ema > 30 && ++slowCount >= 6) this.slow = true; }
+        if (this.slow && !this.lowRes) this.setRes(true);
+      } else if (!this.lowRes || now - lastMove > Math.max(350, ema * 2.5)) { ema = 0; slowCount = 0; if (this.lowRes) this.setRes(false); } // 少し待ってから元の解像度へ（細かい切り替えの繰り返しを防ぐ）
+      wasMoving = moving; lastFrame = now;
+      const full = !this.composer || (!moving && !this.lowRes && (!busy || now - lastFull > 400));
+      if (full) { this.draw(); lastFull = now; this.aoPending = this.lowRes; }
       else { this.renderer.render(this.scene, this.camera); this.aoPending = true; }
       this.onBearing(this.bearing());
     };
@@ -151,6 +202,16 @@ export class Viewer {
   }
 
   private sun!: THREE.DirectionalLight;
+  private bldBox = new THREE.Box3(); // 建物だけの範囲（保存用の画像の構図に使う）
+  private slow = false;    // 操作中のコマが遅い端末だと分かったら true
+  private lowRes = false;  // いま解像度を下げて描いているか
+  private basePR = 1;
+  private setRes(low: boolean) {
+    this.lowRes = low;
+    const pr = low ? Math.max(0.75, this.basePR * 0.6) : this.basePR;
+    this.renderer.setPixelRatio(pr); this.composer?.setPixelRatio(pr);
+    this.renderer.domElement.style.width = "100%"; this.renderer.domElement.style.height = "100%";
+  }
   private composer: EffectComposer | null = null;
   private draw() { if (this.composer) this.composer.render(); else this.renderer.render(this.scene, this.camera); }
 
@@ -385,7 +446,7 @@ export class Viewer {
   /** 計測用：直前の描画の三角形数・描画回数と、建物部分の三角形数 */
   stats() {
     let planTris = 0;
-    this.planGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) { const g = m.geometry; planTris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
+    this.planGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry) { const g = m.geometry; planTris += ((g.index ? g.index.count : g.attributes.position.count) / 3) * ((m as unknown as THREE.InstancedMesh).count ?? 1); } });
     const r = this.renderer.info.render;
     return { triangles: r.triangles, calls: r.calls, planTris: Math.round(planTris) };
   }
@@ -398,7 +459,11 @@ export class Viewer {
     clear(this.planGroup);
     this.planGroup.rotation.y = rotation; // (s,t) 系を (u,v) 系へ
     const pal = PALETTES[this.style];
-    for (const b of plan.buildings) { const bg = building(b, pal, this.style, plan.buildings); bg.userData.bld = true; this.planGroup.add(bg); }
+    const statics: THREE.Object3D[] = [];
+    this.bldBox.makeEmpty();
+    for (const b of plan.buildings) { const bg = building(b, pal, this.style, plan.buildings); this.planGroup.add(bg); statics.push(bg); }
+    this.planGroup.updateMatrixWorld(true);
+    for (const bg of statics) this.bldBox.union(new THREE.Box3().setFromObject(bg));
     // 玄関から道路までのコンクリートの通路（道路に出られる向きのときだけ）
     for (const b of plan.buildings) {
       if ((b.baseFloor ?? 0) !== 0 || b.kind === "store") continue;
@@ -415,15 +480,33 @@ export class Viewer {
       if (!toRoad || len < 0.5) continue;
       const path = new THREE.Mesh(meterUVBox(1.2, 0.04, len), tileMat());
       path.position.set(dx, 0.03, z0 + len / 2); path.receiveShadow = true;
-      this.planGroup.add(path);
+      this.planGroup.add(path); statics.push(path);
     }
+    const byModel = new Map<number, { u0: number; v0: number; u1: number; v1: number }[]>();
     plan.stalls.forEach((s, i) => {
-      this.planGroup.add(stallLines(s));
+      const sl = stallLines(s); this.planGroup.add(sl); statics.push(sl);
       // 月極駐車場は半分ほど、ほかは全区画に車を置く
-      if (plan.use !== "other" || i % 2 === 0) this.planGroup.add(carModels?.length ? modelCar(s, carModels[i % carModels.length]) : car(s, CAR_COLORS[i % CAR_COLORS.length]));
+      if (plan.use === "other" && i % 2 !== 0) return;
+      if (carModels?.length) { const k = i % carModels.length; (byModel.get(k) ?? byModel.set(k, []).get(k)!).push(s); }
+      else this.planGroup.add(car(s, CAR_COLORS[i % CAR_COLORS.length]));
     });
+    // 建物・通路・駐車区画は、材質ごとに1つの形へまとめる
+    const merged = mergeByMaterial(this.planGroup, statics);
+    for (const o of statics) { this.planGroup.remove(o); o.traverse(n => (n as THREE.Mesh).geometry?.dispose?.()); }
+    this.planGroup.add(...merged);
+    // 車：同じ車種は区画の数だけまとめて描く
+    const mx = new THREE.Matrix4();
+    for (const [k, stalls] of byModel) for (const part of carModels![k]) {
+      const im = new THREE.InstancedMesh(part.geo, part.mat, stalls.length);
+      stalls.forEach((s, i) => im.setMatrixAt(i, mx.makeTranslation((s.u0 + s.u1) / 2, 0, -(s.v0 + s.v1) / 2)));
+      im.castShadow = true; im.receiveShadow = true; im.userData.shared = true; // 形は車種ごとに共有（消すときに破棄しない）
+      im.computeBoundingSphere();
+      this.planGroup.add(im);
+    }
     clear(this.extGroup);
     this.extGroup.add(exterior(this.sitePoly, this.roadsUV));
+    const cs = contactShadow(plan.buildings);
+    if (cs) { cs.rotation.y = rotation; this.extGroup.add(cs); }
     // 車のモデルがまだなら読み込んで、届いたら置き直す
     if (plan.stalls.length && !carModels) loadCars().then(() => { if (this.lastPlan?.plan === plan && carModels?.length) this.setPlan(plan, rotation); });
   }
@@ -444,7 +527,7 @@ export class Viewer {
       // 建物を画面の主役にする：建物だけの範囲で距離を決める（駐車場や通路まで入れると建物が小さくなる）
       const box = new THREE.Box3();
       this.planGroup.updateMatrixWorld(true);
-      for (const ch of this.planGroup.children) if (ch.userData.bld) box.union(new THREE.Box3().setFromObject(ch));
+      box.copy(this.bldBox);
       if (box.isEmpty()) box.setFromObject(this.planGroup);
       if (box.isEmpty()) box.setFromObject(this.siteGroup);
       const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
@@ -498,7 +581,7 @@ export class Viewer {
 function clear(g: THREE.Group) {
   for (const c of [...g.children]) {
     g.remove(c);
-    c.traverse(o => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
+    c.traverse(o => { const m = o as THREE.Mesh; if (!m.userData.shared) m.geometry?.dispose?.(); });
   }
 }
 
@@ -521,7 +604,7 @@ function tex(key: TexKey, kind: "diff" | "nor"): THREE.Texture {
     t = texLoader.load(`/assets/tex/${id}.jpg`, () => texListeners.forEach(f => f()));
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(1 / TILE_M[key], 1 / TILE_M[key]);
-    t.anisotropy = 4;
+    t.anisotropy = 8;
     if (kind === "diff") t.colorSpace = THREE.SRGBColorSpace;
     texCache.set(id, t);
   }
@@ -612,12 +695,81 @@ const PALETTES: Record<ExteriorStyle, Palette> = {
   black: { gain: 1.7, roofGain: 1.15, wall: 0x2f3336, apartment: 0x34383b, store: 0x303437, edge: 0x5b6266, roof: 0x222528, parapet: 0x3a3f43, win: 0x4f6573, frame: 0x1c1f21, accent: 0xb3875a, band: false,
     wallTex: "wall_metal", aptTex: "wall_metal", storeTex: "wall_metal", roofTex: "wall_metal", tint: 0x8a9096, roofTint: 0x6a7076, accentTex: "wall_wood", accentTint: 0xe0b98e },
 };
+const LINE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+// 同じ設定の材質は使い回す（棟が違っても同じ材質なら1つの形にまとめて描けるようにする）
+const stdCache = new Map<string, THREE.MeshStandardMaterial>();
+function stdMat(p: THREE.MeshStandardMaterialParameters): THREE.MeshStandardMaterial {
+  const k = JSON.stringify(p);
+  let m = stdCache.get(k);
+  if (!m) { m = new THREE.MeshStandardMaterial(p); stdCache.set(k, m); }
+  return m;
+}
+/** objs の中のメッシュを、材質ごとに1つの形へまとめる（描画回数を減らす）。座標は root の中の座標にそろえる */
+function mergeByMaterial(root: THREE.Object3D, objs: THREE.Object3D[]): THREE.Mesh[] {
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert();
+  const buckets = new Map<string, { mat: THREE.Material; cast: boolean; recv: boolean; geos: THREE.BufferGeometry[] }>();
+  const add = (mat: THREE.Material, cast: boolean, recv: boolean, geo: THREE.BufferGeometry) => {
+    const k = `${mat.uuid}|${cast}|${recv}`;
+    (buckets.get(k) ?? buckets.set(k, { mat, cast, recv, geos: [] }).get(k)!).geos.push(geo);
+  };
+  const pick = (g: THREE.BufferGeometry, start: number, count: number, mx: THREE.Matrix4) => {
+    const out = new THREE.BufferGeometry();
+    for (const [name, size] of [["position", 3], ["normal", 3], ["uv", 2]] as const) {
+      const a = g.attributes[name] as THREE.BufferAttribute | undefined;
+      const arr = new Float32Array(count * size);
+      if (a) for (let i = 0; i < count; i++) for (let c = 0; c < size; c++) arr[i * size + c] = a.getComponent(start + i, c);
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+    }
+    if (!g.attributes.normal) out.computeVertexNormals();
+    return out.applyMatrix4(mx);
+  };
+  for (const o of objs) o.traverse(n => {
+    const m = n as THREE.Mesh;
+    if (!m.isMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh) return;
+    const mx = new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld);
+    const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry;
+    const total = g.attributes.position.count;
+    if (Array.isArray(m.material)) for (const gr of g.groups) add(m.material[gr.materialIndex ?? 0], m.castShadow, m.receiveShadow, pick(g, gr.start, Math.min(gr.count, total - gr.start), mx));
+    else add(m.material, m.castShadow, m.receiveShadow, pick(g, 0, total, mx));
+    if (g !== m.geometry) g.dispose();
+  });
+  const out: THREE.Mesh[] = [];
+  for (const b of buckets.values()) {
+    const mesh = new THREE.Mesh(mergeGeometries(b.geos), b.mat);
+    mesh.castShadow = b.cast; mesh.receiveShadow = b.recv;
+    b.geos.forEach(g => g.dispose());
+    out.push(mesh);
+  }
+  return out;
+}
+/** 建物の足元の陰（接地感）。外へ1.1mかけて薄くなる黒い帯を、頂点の透明度で描く。全棟で1つの形 */
+function contactShadow(boxes: readonly Box[]): THREE.Mesh | null {
+  const pos: number[] = [], col: number[] = [];
+  const quad = (a: number[], b: number[], c: number[], d: number[], a0: number, a1: number) => { // a,b：内側　c,d：外側
+    for (const [p, al] of [[a, a0], [b, a0], [c, a1], [a, a0], [c, a1], [d, a1]] as [number[], number][]) { pos.push(p[0], 0.056, p[1]); col.push(0, 0, 0, al); }
+  };
+  for (const b of boxes) {
+    if ((b.baseFloor ?? 0) !== 0) continue;
+    const ring = (o: number) => [[b.u0 - o, -b.v0 + o], [b.u1 + o, -b.v0 + o], [b.u1 + o, -b.v1 - o], [b.u0 - o, -b.v1 - o]];
+    const R = [ring(-0.05), ring(0.3), ring(1.1)], A = [0.42, 0.17, 0];
+    for (let k = 0; k < 2; k++) for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; quad(R[k][i], R[k][j], R[k + 1][j], R[k + 1][i], A[k], A[k + 1]); }
+  }
+  if (!pos.length) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 4));
+  const m = new THREE.Mesh(geo, CONTACT_MAT);
+  m.renderOrder = 1;
+  return m;
+}
+const CONTACT_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, vertexColors: true, transparent: true, depthWrite: false, fog: false });
 const CAR_COLORS = [0xf4f4f2, 0x9ea6ab, 0x2f3a4a, 0x7a2e2e, 0x1f2326];
 
 // 駐車区画：白線（幅12cm）で奥と両側を引く
 function stallLines(s: { u0: number; v0: number; u1: number; v1: number }): THREE.Group {
   const g = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const mat = LINE_MAT;
   const W = 0.12, y = 0.03;
   const strip = (cx: number, cz: number, lx: number, lz: number) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(lx, lz), mat);
@@ -634,13 +786,6 @@ function stallLines(s: { u0: number; v0: number; u1: number; v1: number }): THRE
   strip(s.u1 - W / 2, -(s.v0 + len / 2), W, len);
   strip(s.u0 + wid / 2, -(s.v1 - W / 2), wid, W);
   return g;
-}
-
-// 車のモデルを区画の中央に置く（前を区画の奥に向けて頭から駐車）
-function modelCar(s: { u0: number; v0: number; u1: number; v1: number }, model: THREE.Object3D): THREE.Object3D {
-  const c = model.clone(true);
-  c.position.set((s.u0 + s.u1) / 2, 0, -(s.v0 + s.v1) / 2);
-  return c;
 }
 
 // 普通自動車（全長4.4m・全幅1.7m）：車体・客室・窓・タイヤ。車のモデルが読み込めないときの代わり
@@ -697,11 +842,11 @@ function blockMat(): THREE.MeshStandardMaterial {
   if (blockMaterial) return blockMaterial;
   const c = document.createElement("canvas"); c.width = 256; c.height = 128;
   const g = c.getContext("2d")!;
-  g.fillStyle = "#c9c9c4"; g.fillRect(0, 0, 256, 128);
+  g.fillStyle = "#9d9d98"; g.fillRect(0, 0, 256, 128);
   let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let row = 0; row < 2; row++) for (let col = -1; col < 2; col++) {
     const x = col * 128 + (row ? 64 : 0), k = 196 + Math.floor(rnd() * 14);
-    g.fillStyle = `rgb(${k},${k},${k - 4})`; g.fillRect(x + 2, row * 64 + 2, 124, 60);
+    g.fillStyle = `rgb(${k},${k},${k - 4})`; g.fillRect(x + 3, row * 64 + 3, 122, 58);
   }
   for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? 0 : 255},${rnd() < 0.5 ? 0 : 255},0,${0.02 + rnd() * 0.03})`; g.fillRect(rnd() * 256, rnd() * 128, 2, 2); }
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 0.8, 1 / 0.4); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
@@ -743,7 +888,7 @@ function exterior(P: [number, number][], roads: [number, number][][]): THREE.Gro
     }
   }
   if (curbGeo.length) { const m = new THREE.Mesh(mergeGeometries(curbGeo), texMat("ground_concrete", 0xe9e7e2, 0.4, THREE.FrontSide, 2.0)); m.receiveShadow = true; g.add(m); }
-  if (lineGeo.length) { const m = new THREE.Mesh(mergeGeometries(lineGeo), new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.9 })); m.receiveShadow = true; g.add(m); }
+  if (lineGeo.length) { const m = new THREE.Mesh(mergeGeometries(lineGeo), stdMat({ color: 0xf2f2ee, roughness: 0.9 })); m.receiveShadow = true; g.add(m); }
   return g;
 }
 
@@ -757,11 +902,11 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   const wallMat = texMat(wallTex, pal.tint, 0.8, THREE.FrontSide, pal.gain), wallMatBase = wallMat;
   const accent = texMat(pal.accentTex, pal.accentTint, 0.6, THREE.FrontSide, 1.1);
   const accentBay = texMat(pal.accentTex, pal.accentTint, 0.6, THREE.FrontSide, 1.25);
-  const trimMat = new THREE.MeshStandardMaterial({ color: pal.parapet, roughness: 0.7 });
-  const frameMat = new THREE.MeshStandardMaterial({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
-  const winMat = reflective(new THREE.MeshStandardMaterial({ color: pal.win, roughness: 0.05, metalness: 0, envMapIntensity: 1.8, transparent: true, opacity: 0.55, depthWrite: false })); // ガラスは空を映す
-  const roomMat = new THREE.MeshStandardMaterial({ color: 0x1e2428, roughness: 1 });
-  const curtainMat = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 1 });
+  const trimMat = stdMat({ color: pal.parapet, roughness: 0.7 });
+  const frameMat = stdMat({ color: pal.frame, roughness: 0.5, metalness: 0.2 });
+  const winMat = reflective(stdMat({ color: pal.win, roughness: 0.05, metalness: 0, envMapIntensity: 1.8, transparent: true, opacity: 0.55, depthWrite: false })); // ガラスは空を映す
+  const roomMat = stdMat({ color: 0x1e2428, roughness: 1 });
+  const curtainMat = stdMat({ color: 0xe8e4dc, roughness: 1 });
   // 細かい部品は材質ごとに1つの形にまとめて描く（部品が多くても重くならないように）
   const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const put = (mat: THREE.Material, geo: THREE.BufferGeometry, x: number, y: number, z: number, rotY = 0) => {
@@ -777,7 +922,7 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   // 和風：1階の腰板と、各階の上の庇
   for (let f = 1; f < b.floors; f++) {
     const y = y0 + f * fh;
-    if (pal.band) put(new THREE.MeshStandardMaterial({ color: pal.roof }), box(w + 1.0, 0.12, d + 1.0), cx, y, cz);
+    if (pal.band) put(stdMat({ color: pal.roof }), box(w + 1.0, 0.12, d + 1.0), cx, y, cz);
     else put(trimMat, box(w + 0.06, 0.14, d + 0.06), cx, y, cz); // 幕板（階の境目の帯）
   }
 
@@ -881,7 +1026,7 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   const body = new THREE.Mesh(mergeGeometries(walls.map(x => x.index ? x.toNonIndexed() : x)), wallMat);
   body.castShadow = true; body.receiveShadow = true; g.add(body);
 
-  const doorMat = accentTo ? new THREE.MeshStandardMaterial({ color: pal.frame === 0x1c1f21 ? 0x23272a : 0x3b4246, roughness: 0.45, metalness: 0.3 }) : accent;
+  const doorMat = accentTo ? stdMat({ color: pal.frame === 0x1c1f21 ? 0x23272a : 0x3b4246, roughness: 0.45, metalness: 0.3 }) : accent;
   for (const o of openings) {
     if (!o.W) continue;
     const { face, t, yc, W, H } = o;
@@ -938,7 +1083,7 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
   }
   // バルコニー：戸建ては2階正面の一部、集合住宅は2階以上の正面いっぱい。裏は共用廊下の手すり
   // 手すりは半透明のパネル＋細い笠木（重たい箱に見えないように）
-  const panelMat = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.25, metalness: 0, transparent: true, opacity: 0.55 });
+  const panelMat = stdMat({ color: 0xcfd8dc, roughness: 0.25, metalness: 0, transparent: true, opacity: 0.55 });
   const balcony = (y: number, x0: number, x1: number, depth: number) => {
     const bw = x1 - x0, mx = (x0 + x1) / 2, z = -b.v0 + depth / 2, zf = -b.v0 + depth - 0.03;
     put(trimMat, box(bw, 0.18, depth), mx, y + 0.09, z);
@@ -967,14 +1112,14 @@ function building(b: Box, pal: Palette, style: ExteriorStyle, others: readonly B
 
   // 数値表示と同じ屋根仕様から生成する（色のパレットは形状を決めない）。
   const spec = roofSpec(b, style);
-  const gutterMat = new THREE.MeshStandardMaterial({ color: spec.kind === "hip" ? 0x4a4f52 : pal.frame === 0x1c1f21 ? 0x2a2d2f : 0xe8e8e4, roughness: 0.5 });
+  const gutterMat = stdMat({ color: spec.kind === "hip" ? 0x4a4f52 : pal.frame === 0x1c1f21 ? 0x2a2d2f : 0xe8e8e4, roughness: 0.5 });
   g.add(createRoof(b, spec, {
     surface: texMat(pal.roofTex, pal.roofTint, 1.0, THREE.DoubleSide, pal.roofGain),
     trim: trimMat, gutter: gutterMat,
-    coping: pal.band ? new THREE.MeshStandardMaterial({ color: pal.roof }) : frameMat,
+    coping: pal.band ? stdMat({ color: pal.roof }) : frameMat,
     membrane: texMat("ground_concrete", 0xb4c8f0, 0.5, THREE.FrontSide, 1.45),
     wall: wallMat,
-    ridge: new THREE.MeshStandardMaterial({ color: spec.kind === "hip" ? 0x3d4347 : pal.band ? 0x3d4347 : pal.frame === 0x1c1f21 ? 0x1e2123 : 0x8b9296, roughness: 0.6, metalness: spec.kind === "hip" ? 0 : 0.3 }),
+    ridge: stdMat({ color: spec.kind === "hip" ? 0x3d4347 : pal.band ? 0x3d4347 : pal.frame === 0x1c1f21 ? 0x1e2123 : 0x8b9296, roughness: 0.6, metalness: spec.kind === "hip" ? 0 : 0.3 }),
   }, (face, t) => !covered(face, t, spec.baseY + spec.parapetHeight / 2)));
   for (const [mat, list] of parts) {
     const m = new THREE.Mesh(mergeGeometries(list.map(x => x.index ? x.toNonIndexed() : x)), mat);
