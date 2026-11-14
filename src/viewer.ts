@@ -454,6 +454,20 @@ export class Viewer {
   }
 
   getStyle(): ExteriorStyle { return this.style; }
+  /**
+   * 入力の途中に、見えないところで一度描いておく（描画の準備＝シェーダーの組み立てを先に済ませる）。
+   * 素材が届くのを待ち、見本の敷地と案を置いて描く。still() が false になったら（本物の結果を表示し始めたら）何もしない
+   */
+  async warm(res: EngineResult, plan: Plan, still: () => boolean) {
+    await Promise.all([loadCars(), loadSky()]);
+    await new Promise(r => setTimeout(r, 0));
+    if (!still()) return;
+    this.setSite(res); this.setPlan(plan, res.site.rotation);
+    try { await this.renderer.compileAsync(this.scene, this.camera); } catch { /* 準備できなくても、表示のときに行われる */ }
+    if (!still()) return;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.scene, this.camera);
+  }
   /** 計測用：直前の描画の三角形数・描画回数と、建物部分の三角形数 */
   stats() {
     let planTris = 0;

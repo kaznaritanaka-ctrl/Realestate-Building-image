@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
-import { Viewer, preload3d, type ExteriorStyle, type ViewSide } from "./viewer.ts";
+import type { Viewer, ExteriorStyle, ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
@@ -219,12 +219,32 @@ let viewer: Viewer | null = null;
 let result: EngineResult | null = null;
 let activePlan = 0;
 
-// 3D用のデータ（車・質感・空の画像）は、場所や敷地を入力している間の手が空いたときに先に読み込む。結果画面を開いたときの待ちが減る
-let preloaded = false;
+// 3Dのプログラム（three.js など）は別ファイル。場所や敷地を入力している間の手が空いたときに読み込み、
+// 素材（車・質感・空の画像）の先読みと、描画の準備（見えないところで見本を一度描く）まで済ませておく
+type ViewerModule = typeof import("./viewer.ts");
+let V: ViewerModule | null = null, viewerLoading: Promise<ViewerModule> | null = null;
+const loadViewer = () => (viewerLoading ??= import("./viewer.ts").then(m => (V = m)));
+let preloaded = false, realShown = false;
+function makeViewer(): Viewer {
+  const v = new V!.Viewer($("#viewer")); v.setStyle(state.style ?? "white");
+  const needle = $("#gz-needle");
+  v.onBearing = (rad) => { needle.style.transform = `translate(-50%, -50%) rotate(${((rad * 180) / Math.PI).toFixed(1)}deg)`; };
+  return v;
+}
 function preloadWhenIdle() {
   if (preloaded) return; preloaded = true;
+  const run = () => void loadViewer().then(m => {
+    m.preload3d();
+    if (viewer || realShown) return;
+    try {
+      // 見本：12m×20mの敷地の戸建て（実在の土地ではない。画面には出さない）
+      const res = computePlans({ polygon: [[0, 0], [12, 0], [12, 20], [0, 20]], roadEdges: [{ index: 0, width: "4to6" }], zone: "r1mid", focusUse: null, exteriorStyle: state.style ?? "white" });
+      viewer = makeViewer();
+      void viewer.warm(res, res.plans[0], () => !realShown);
+    } catch { /* 準備に失敗しても、結果画面で通常どおり作る */ }
+  });
   const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
-  if (idle) idle(preload3d, { timeout: 3000 }); else setTimeout(preload3d, 1500);
+  if (idle) idle(run, { timeout: 3000 }); else setTimeout(run, 1500);
 }
 function go(step: number) {
   if (step >= 1) preloadWhenIdle();
@@ -882,11 +902,10 @@ const CERT: Record<string, string> = { confirmed: "確認済み", public: "公�
 function renderResult() {
   if (!result) return;
   paintShape();
-  if (!viewer) {
-    viewer = new Viewer($("#viewer")); viewer.setStyle(state.style ?? "white");
-    const needle = $("#gz-needle");
-    viewer.onBearing = (rad) => { needle.style.transform = `translate(-50%, -50%) rotate(${((rad * 180) / Math.PI).toFixed(1)}deg)`; };
-  }
+  // 3Dのプログラムがまだ届いていなければ、届いてから描く
+  if (!V) { void loadViewer().then(() => renderResult()); return; }
+  realShown = true;
+  if (!viewer) viewer = makeViewer();
   paintStyle();
   viewer.setSite(result);
   placeRoadButton();
