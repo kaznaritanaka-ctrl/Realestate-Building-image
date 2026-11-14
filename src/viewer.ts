@@ -15,6 +15,16 @@ import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
+// 空の画像（環境光と映り込み用）。一度だけ読み込む
+let skyLoading: Promise<THREE.DataTexture | null> | null = null;
+function loadSky(): Promise<THREE.DataTexture | null> {
+  return (skyLoading ??= new HDRLoader().setDataType(THREE.FloatType).loadAsync("/assets/tex/sky_suburban_garden.hdr").catch(() => null));
+}
+/** 3D表示に使うデータ（車・質感の画像・空の画像）を先に読み込んでおく。入力の途中、手が空いたときに呼ぶ */
+export function preload3d() {
+  void loadCars(); void loadSky();
+  for (const k of ["wall_siding_v", "wall_plaster", "wall_metal", "wall_wood", "roof_kawara", "ground_asphalt", "ground_concrete", "ground_gravel"] as TexKey[]) { tex(k, "diff"); tex(k, "nor"); }
+}
 // 自作の車モデル（前＝-Z、上＝+Y、原点＝地面の中央）。結果画面に入ったときに一度だけ読み込む
 const CAR_FILES = ["car_liftback_v2", "car_minivan_v1", "car_kei_v1"];
 // 車は読み込んだときに「つやのある部分・つやのない部分・ガラス・模様つき」の数個の形へまとめ直し、
@@ -119,7 +129,8 @@ export class Viewer {
     el.appendChild(this.renderer.domElement);
     this.scene.background = skyGradient();
     // 空の写真（Poly Haven の CC0 HDRI）を環境光と映り込みに使う。届くまでは今の明かりだけで描く
-    new HDRLoader().setDataType(THREE.FloatType).load("/assets/tex/sky_suburban_garden.hdr", (hdr) => {
+    loadSky().then((hdr) => {
+      if (!hdr) return;
       // 環境光：空の明るさの分布を最初に1回だけ9個の数（球面調和関数）にまとめる。毎フレームの計算がほぼ要らない
       this.scene.add(new THREE.LightProbe(skySH(hdr), ENV_INTENSITY));
       // 空の映り込みは、窓ガラスと車だけ（全部の材質に掛けると描くのが重い）

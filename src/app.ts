@@ -2,7 +2,7 @@ import maplibregl from "maplibre-gl";
 import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
 import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
-import { Viewer, type ExteriorStyle, type ViewSide } from "./viewer.ts";
+import { Viewer, preload3d, type ExteriorStyle, type ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
@@ -219,7 +219,15 @@ let viewer: Viewer | null = null;
 let result: EngineResult | null = null;
 let activePlan = 0;
 
+// 3D用のデータ（車・質感・空の画像）は、場所や敷地を入力している間の手が空いたときに先に読み込む。結果画面を開いたときの待ちが減る
+let preloaded = false;
+function preloadWhenIdle() {
+  if (preloaded) return; preloaded = true;
+  const idle = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  if (idle) idle(preload3d, { timeout: 3000 }); else setTimeout(preload3d, 1500);
+}
 function go(step: number) {
+  if (step >= 1) preloadWhenIdle();
   if (document.body.classList.contains("has-results")) { $("#search-results").innerHTML = ""; document.body.classList.remove("has-results"); }
   const from = state.step;
   if (step === 6 && !compute()) return;

@@ -3,3 +3,13 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
   Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src blob:; img-src 'self' data: blob: https://cyberjapandata.gsi.go.jp; connect-src 'self' blob: https://cyberjapandata.gsi.go.jp https://msearch.gsi.go.jp https://api.plateauview.mlit.go.jp https://assets.cms.plateau.reearth.io; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+
+# 3D用の素材（質感の画像・空の画像・車のモデル・デコーダー）は中身がめったに変わらないので、端末に1週間ためておく
+/assets/tex/*
+  Cache-Control: public, max-age=604800
+/assets/models/*
+  Cache-Control: public, max-age=604800
+/assets/draco/*
+  Cache-Control: public, max-age=604800
+/assets/basis/*
+  Cache-Control: public, max-age=604800
