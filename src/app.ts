@@ -45,9 +45,9 @@ if (!Object.hasOwn(ZONES, state.zone)) state.zone = "unknown";
 const pctOk = (v: unknown, min: number, max: number) => typeof v === "string" && (v === "" || (/^\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(v) && Number(v) >= min && Number(v) <= max));
 if (!pctOk(state.bcr, 10, 100)) state.bcr = "";
 if (!pctOk(state.far, 50, 1300)) state.far = "";
-if (Array.isArray(state.edges)) state.edges = state.edges.map(e => (["none", "lt4", "4to6", "6to12", "gte12"].includes(e) ? e : "none"));
+if (!Array.isArray(state.points) || state.points.length > 60 || !state.points.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= -180 && q[0] <= 180 && q[1] >= -90 && q[1] <= 90)) { state.points = []; state.edges = []; }
+if (Array.isArray(state.edges)) state.edges = state.edges.slice(0, state.points.length).map(e => (["none", "lt4", "4to6", "6to12", "gte12"].includes(e) ? e : "none"));
 else state.edges = [];
-if (!Array.isArray(state.points) || !state.points.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= -180 && q[0] <= 180 && q[1] >= -90 && q[1] <= 90)) state.points = [];
 if (!["api", "user", "guess", "none"].includes(state.zoneSource)) state.zoneSource = "none";
 if (!["", "house", "rental", "other"].includes(state.focus)) state.focus = "house";
 if (state.situation !== undefined && !SITUATIONS.includes(state.situation)) state.situation = undefined;
