@@ -38,7 +38,21 @@ const $ = <T extends HTMLElement = HTMLElement>(s: string) => document.querySele
 const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(document.querySelectorAll(s)) as T[];
 const KEY = "tochi-mirai:v1";
 
+// 共有リンク・保存済み状態など外部由来の値の検証（週次監査 M-1 対応）
+const EDGE_CHOICES: EdgeChoice[] = ["none", "lt4", "4to6", "6to12", "gte12"];
+const pctStr = (v: unknown, max: number): string => {
+  if (typeof v !== "string" || !/^\d{1,4}(\.\d{1,2})?$/.test(v)) return "";
+  const n = Number(v);
+  return n > 0 && n <= max ? v : "";
+};
+
 const state: State = load() ?? { step: 0, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+// 保存済み状態の再検証：汚染された値が残っていても読み込み時に落とす
+if (!Object.prototype.hasOwnProperty.call(ZONES, state.zone)) state.zone = "unknown";
+state.bcr = pctStr(state.bcr, 100);
+state.far = pctStr(state.far, 2000);
+if (Array.isArray(state.edges)) state.edges = state.edges.map(e => (EDGE_CHOICES.includes(e) ? e : "none"));
+if (!["api", "user", "guess", "none"].includes(state.zoneSource)) state.zoneSource = "none";
 applyFocusParam(state);
 const restored = applyShareHash(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
@@ -69,17 +83,23 @@ function shareUrl(): string {
 }
 function applyShareHash(st: State): boolean {
   const m = location.hash.match(/(?:^#|&)r=([A-Za-z0-9_-]+)/);
-  if (!m) return false;
+  if (!m || m[1].length > 20000) return false;
   try {
     const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
     const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))) as ShareData;
     if (d.v !== 1 || !Array.isArray(d.p) || d.p.length < 3 || d.p.length > 60) return false;
     if (!d.p.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite))) return false;
-    if (!(d.z in ZONES)) return false;
+    if (typeof d.z !== "string" || !Object.prototype.hasOwnProperty.call(ZONES, d.z)) return false;
+    const pick = (v: unknown, allowed: readonly string[], fallback: string | undefined) =>
+      (typeof v === "string" && allowed.includes(v) ? v : fallback);
     Object.assign(st, {
-      points: d.p, edges: (d.e ?? []).slice(0, d.p.length), zone: d.z, bcr: d.b ?? "", far: d.f ?? "",
-      focus: d.u ?? "house", situation: d.s, style: d.st ?? st.style, rotOffset: d.r ?? 0, shape: d.sh ?? "auto",
-      zoneSource: d.zs ?? "user", sample: false, located: true, purposeSet: true, step: 6, zoneFetchedFor: "", zoneApi: null,
+      points: d.p,
+      edges: (Array.isArray(d.e) ? d.e : []).slice(0, d.p.length).map(e => (EDGE_CHOICES.includes(e) ? e : "none")),
+      zone: d.z, bcr: pctStr(d.b, 100), far: pctStr(d.f, 2000),
+      focus: pick(d.u, ["", "house", "rental", "other"], "house"), situation: pick(d.s, SITUATIONS, undefined),
+      style: pick(d.st, ["wa", "white", "black"], st.style), rotOffset: typeof d.r === "number" && Number.isFinite(d.r) ? d.r : 0,
+      shape: pick(d.sh, ["auto", "rect", "L", "U"], "auto"),
+      zoneSource: pick(d.zs, ["api", "user", "guess", "none"], "user"), sample: false, located: true, purposeSet: true, step: 6, zoneFetchedFor: "", zoneApi: null,
     });
     history.replaceState(null, "", location.pathname + location.search + location.hash.replace(/(^#|&)r=[A-Za-z0-9_-]+/, "$1").replace(/^#&/, "#"));
     return true;
@@ -781,7 +801,7 @@ async function renderZone() {
     const z = state.zoneApi;
     auto.classList.remove("muted-card", "control-card");
     if (state.zoneSource === "user") {
-      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
+      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${esc(String(state.bcr || ZONES[state.zone].bcr))}％・容積率 ${esc(String(state.far || ZONES[state.zone].far))}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
       const bcrTxt = z.bcr != null ? `${z.bcr}％` : `${ZONES[state.zone].bcr}％（代表値で試算）`;

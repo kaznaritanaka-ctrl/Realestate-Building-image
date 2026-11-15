@@ -88,7 +88,7 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
   const hu = layer(si, "XKT024");
   if (ok(hu) && hits(hu).length) rows.push(row("高度利用地区", generic(hu), true));
   const road = layer(si, "XKT030");
-  if (ok(road)) rows.push(row("都市計画道路", hits(road).length ? `敷地から約${hits(road)[0].d}m以内に計画線があります<small>敷地にかかる場合は建築に制限があります。</small>` : `<span class="muted">近く（25m以内）にはありません</span>`, hits(road).length > 0));
+  if (ok(road)) rows.push(row("都市計画道路", hits(road).length ? `敷地から約${esc(String(hits(road)[0].d))}m以内に計画線があります<small>敷地にかかる場合は建築に制限があります。</small>` : `<span class="muted">近く（25m以内）にはありません</span>`, hits(road).length > 0));
 
   // ハザード
   const fl = layer(si, "XKT026");
@@ -130,7 +130,7 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
       const price = Number(str(p.u_current_years_price_ja).replace(/[^\d]/g, ""));
       const man = Math.round((price * areaSqm) / 1e4);
       const est = price && areaSqm ? `<small>単価×この敷地の面積＝約${man >= 10000 ? `${(man / 10000).toFixed(1)}億` : `${man.toLocaleString("ja-JP")}万`}円（あくまで目安）</small>` : "";
-      return `<div class="si-item">${esc(str(p.u_current_years_price_ja))}・${esc(str(p.use_category_name_ja))}（約${h.d}m先、${esc(str(p.target_year_name_ja))}時点）${est}</div>`;
+      return `<div class="si-item">${esc(str(p.u_current_years_price_ja))}・${esc(str(p.use_category_name_ja))}（約${esc(String(h.d))}m先、${esc(str(p.target_year_name_ja))}時点）${est}</div>`;
     });
     rows.push(row("近くの地価（公示・調査）", items.join("")));
   } else if (ok(layer(si, "XPT002"))) rows.push(row("近くの地価（公示・調査）", `<span class="muted">1.5km以内に地点がありません</span>`));
@@ -140,7 +140,7 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
     const items = st.filter(h => { const n = str(h.props.S12_001_ja); if (seen.has(n)) return false; seen.add(n); return true; }).slice(0, 2).map(h => {
       const p = h.props;
       const yk = Object.keys(p).filter(k => /^\d{4}_passenger_count$/.test(k) && Number(p[k]) > 0).sort().pop();
-      return `${esc(str(p.S12_001_ja))}駅（${esc(str(p.S12_002_ja))}、約${h.d}m）${yk ? `：乗降 ${Number(p[yk]).toLocaleString("ja-JP")}人/日（${yk.slice(0, 4)}年）` : ""}`;
+      return `${esc(str(p.S12_001_ja))}駅（${esc(str(p.S12_002_ja))}、約${esc(String(h.d))}m）${yk ? `：乗降 ${Number(p[yk]).toLocaleString("ja-JP")}人/日（${yk.slice(0, 4)}年）` : ""}`;
     });
     rows.push(row("近くの駅", items.join("<br>")));
   }

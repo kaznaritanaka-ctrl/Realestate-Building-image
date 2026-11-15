@@ -115,11 +115,17 @@ function json(data: unknown, status = 200): Response {
 const SID_RE = /^[a-f0-9]{16,32}$/;
 
 async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  // 他サイトのページからの送信を弾く（Origin が無い送信は落とさない。非ブラウザには効かない補助策で、本命のレート制限は Cloudflare 側で行う）
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) return new Response(null, { status: 403 });
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > 2000) return new Response(null, { status: 413 });
   const text = await req.text();
   if (text.length > 2000) return new Response(null, { status: 413 });
   let body: { sid?: string; name?: string; props?: Record<string, unknown> };
   try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
-  if (!body.sid || !SID_RE.test(body.sid) || !body.name || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.sid !== "string" || !SID_RE.test(body.sid) || typeof body.name !== "string" || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
+  if (body.props !== undefined && (typeof body.props !== "object" || body.props === null || Array.isArray(body.props))) return new Response(null, { status: 400 });
   const props: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(body.props ?? {})) {
     if (!PROP_KEYS.has(k)) continue;
@@ -168,8 +174,9 @@ async function plateau(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => void
   const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 20 || lat > 46 || lng < 122 || lng > 154) return json({ error: "bad_request" }, 400);
   try {
-    const rg = await cachedJson(`gsi-rg/${lat.toFixed(4)},${lng.toFixed(4)}`,
-      `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
+    const rLat = Math.round(lat * 1e4) / 1e4, rLng = Math.round(lng * 1e4) / 1e4;
+    const rg = await cachedJson(`gsi-rg/${rLat},${rLng}`,
+      `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${rLat}&lon=${rLng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
     const muni = rg.results?.muniCd?.padStart(5, "0");
     if (!muni) return json({ available: false, reason: "no_municipality" });
     // 政令市の区は、区コード → 市コードの順に試す（例：27127 → 27100）。それ以外の市町村はそのコードだけ
@@ -212,12 +219,13 @@ async function buildings(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => vo
     return r.arrayBuffer();
   };
   try {
-    const res = await gsiBuildings(lat, lng, radius, fetchTile, url.searchParams.has("debug"));
+    const res = await gsiBuildings(lat, lng, radius, fetchTile);
     return new Response(JSON.stringify({ ...res, credit: "国土地理院最適化ベクトルタイル（建物の高さは種類からの推定）" }), {
-      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=86400" },
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" },
     });
   } catch (e) {
-    return json({ buildings: [], error: String(e).slice(0, 200) });
+    console.log(JSON.stringify({ evt: "buildings_error", msg: String(e).slice(0, 200) }));
+    return json({ buildings: [], error: "error" });
   }
 }
 
@@ -233,11 +241,20 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     let r = await cache.match(k);
     if (!r) {
       const up = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY! } });
-      if (up.status !== 200) return { status: up.status, body: null };
+      if (up.status !== 200) {
+        // 上流エラーは60秒だけ負キャッシュし、失敗のたびに再照会して上流枠を消費するのを防ぐ
+        const neg = new Response(JSON.stringify({ __neg_status: up.status }), { headers: { "content-type": "application/json", "cache-control": "public, max-age=60" } });
+        ctx.waitUntil(cache.put(k, neg));
+        return { status: up.status, body: null };
+      }
       r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
       ctx.waitUntil(cache.put(k, r.clone()));
     }
-    try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
+    try {
+      const parsed = await r.json() as { __neg_status?: unknown };
+      if (parsed && typeof parsed === "object" && typeof parsed.__neg_status === "number") return { status: parsed.__neg_status, body: null };
+      return { status: 200, body: parsed };
+    } catch { return { status: 599, body: null }; }
   };
   const [info, elevation, address] = await Promise.all([
     siteInfo(lat, lng, fetchJson, only),
