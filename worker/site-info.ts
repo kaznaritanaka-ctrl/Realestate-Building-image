@@ -89,6 +89,7 @@ export async function siteInfo(lat: number, lng: number, fetchJson: (url: string
         const extra = layer.api === "XPT002" ? `&year=${year}` : "";
         const r = await fetchJson(`https://www.reinfolib.mlit.go.jp/ex-api/external/${layer.api}?response_format=geojson&z=${z}&x=${x}&y=${y}${extra}`);
         lastStatus = r.status;
+        if (r.status === 429) { out[layer.api] = { label: layer.label, error: "rate_limited" }; return; }
         if (r.status !== 200) continue;
         ok = true;
         feats.push(...(((r.body as { features?: Feature[] })?.features) ?? []));

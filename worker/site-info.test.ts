@@ -21,3 +21,13 @@ test("位置データの追加レイヤーを取り込み、商用制約のあ�
   assert.equal((out.XKT029 as {error:string}).error,"license_review_required");
   assert.ok(!seen.some(u=>u.includes("XKT029")));
 });
+
+test("上流予算を使い切ったらズーム再試行を止める", async () => {
+  let calls = 0;
+  const out = await siteInfo(34.7, 135.5, async () => {
+    calls++;
+    return { status: 429, body: null };
+  }, ["XKT001"]);
+  assert.equal(calls, 1);
+  assert.equal((out.XKT001 as { error: string }).error, "rate_limited");
+});

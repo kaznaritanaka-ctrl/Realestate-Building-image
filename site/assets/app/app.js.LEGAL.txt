@@ -3,7 +3,7 @@ Bundled license information:
 maplibre-gl/dist/maplibre-gl.js:
   /**
    * MapLibre GL JS
-   * @license 3-Clause BSD. Full text of license: https://github.com/maplibre/maplibre-gl-js/blob/v5.24.0/LICENSE.txt
+   * @license 3-Clause BSD. Full text of license: https://github.com/maplibre/maplibre-gl-js/blob/v5.24.1/LICENSE.txt
    */
 
 three/examples/jsm/libs/fflate.module.js:
