@@ -73,12 +73,6 @@ section h2 .num { color: var(--accent); font-size: .85em; margin-right: .5em; }
 .sample figcaption span { color: var(--ink-soft); font-size: 0.875rem; }
 .note { color: var(--ink-soft); font-size: 0.875rem; margin-top: 1em; }
 
-.status-list { list-style: none; padding: 0; margin: 0; }
-.status-list li { padding: 12px 0 12px 32px; position: relative; border-bottom: 1px dashed var(--line); }
-.status-list li::before { content: ""; position: absolute; left: 0; top: 18px; width: 16px; height: 16px; background: var(--ink-soft); -webkit-mask: var(--mk) center / contain no-repeat; mask: var(--mk) center / contain no-repeat; }
-.status-list li.done::before { --mk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); background: var(--accent); }
-.status-list li.wip::before { --mk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E"); background: var(--warn); }
-.status-list li.todo::before { --mk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3C/svg%3E"); }
 
 .caution { background: var(--warn-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
 .caution ul { margin: 0; padding-left: 1.2em; }
