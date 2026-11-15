@@ -40,6 +40,20 @@ const $$ = <T extends HTMLElement = HTMLElement>(s: string) => Array.from(docume
 const KEY = "tochi-mirai:v1";
 
 const state: State = load() ?? { step: 0, points: [], edges: [], zone: "unknown", bcr: "", far: "", focus: "house", stage: "curious", sample: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null };
+// 保存済み状態の再検証：旧バージョンや細工された共有リンクで汚染された値が残っていても、読み込み時に落とす（週次監査 M-1 の残件）
+if (!Object.hasOwn(ZONES, state.zone)) state.zone = "unknown";
+const pctOk = (v: unknown, min: number, max: number) => typeof v === "string" && (v === "" || (/^\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(v) && Number(v) >= min && Number(v) <= max));
+if (!pctOk(state.bcr, 10, 100)) state.bcr = "";
+if (!pctOk(state.far, 50, 1300)) state.far = "";
+if (!Array.isArray(state.points) || state.points.length > 60 || !state.points.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= -180 && q[0] <= 180 && q[1] >= -90 && q[1] <= 90)) { state.points = []; state.edges = []; }
+if (Array.isArray(state.edges)) state.edges = state.edges.slice(0, state.points.length).map(e => (["none", "lt4", "4to6", "6to12", "gte12"].includes(e) ? e : "none"));
+else state.edges = [];
+if (!["api", "user", "guess", "none"].includes(state.zoneSource)) state.zoneSource = "none";
+if (!["", "house", "rental", "other"].includes(state.focus)) state.focus = "house";
+if (state.situation !== undefined && !SITUATIONS.includes(state.situation)) state.situation = undefined;
+if (state.style !== undefined && !["wa", "white", "black"].includes(state.style)) state.style = undefined;
+if (state.shape !== undefined && !["auto", "rect", "L", "U"].includes(state.shape)) state.shape = "auto";
+if (state.rotOffset !== undefined && (typeof state.rotOffset !== "number" || !Number.isFinite(state.rotOffset))) state.rotOffset = 0;
 applyFocusParam(state);
 const restored = applyShareHash(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;

@@ -3,15 +3,15 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feature/site-report-a4-landscape]
+    branches: [main, feature/site-report-a4-landscape]
 permissions:
   contents: read
 jobs:
   test-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4.3.0
         with:
           node-version: '24'
           cache: npm
@@ -28,7 +28,7 @@ jobs:
           google-chrome --headless --no-sandbox --disable-gpu --no-pdf-header-footer --print-to-pdf=/tmp/land-report-preview.pdf file:///tmp/land-report-preview.html
           pdfinfo /tmp/land-report-preview.pdf | grep -E '^Pages:[[:space:]]+3$'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: land-report-preview
