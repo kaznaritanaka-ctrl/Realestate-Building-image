@@ -24,7 +24,7 @@ function tileXY(lng: number, lat: number, z: number) {
   return { x: ((lng + 180) / 360) * n, y: ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n };
 }
 
-export async function gsiBuildings(lat: number, lng: number, radius: number, fetchTile: (url: string) => Promise<ArrayBuffer | null>, debug = false) {
+export async function gsiBuildings(lat: number, lng: number, radius: number, fetchTile: (url: string) => Promise<ArrayBuffer | null>) {
   // 半径ぶんの範囲にかかるタイル（z16 は1辺約500m）
   const dLat = radius / 111320, dLng = radius / (111320 * Math.cos((lat * Math.PI) / 180));
   const a = tileXY(lng - dLng, lat + dLat, Z), b = tileXY(lng + dLng, lat - dLat, Z);
@@ -32,21 +32,17 @@ export async function gsiBuildings(lat: number, lng: number, radius: number, fet
   for (let x = Math.floor(a.x); x <= Math.floor(b.x); x++) for (let y = Math.floor(a.y); y <= Math.floor(b.y); y++) tiles.push([x, y]);
 
   const out: GsiBuilding[] = [];
-  const layerNames = new Set<string>();
-  const samples: Record<string, unknown>[] = [];
   for (const [x, y] of tiles.slice(0, 9)) {
     const buf = await fetchTile(`${TILE_URL}/${Z}/${x}/${y}.pbf`);
     if (!buf) continue;
     const vt = new VectorTile(new Pbf(new Uint8Array(buf)));
     for (const name of Object.keys(vt.layers)) {
-      layerNames.add(name);
       if (!/bld|building/i.test(name)) continue;
       const layer = vt.layers[name];
       for (let i = 0; i < layer.length; i++) {
         const f = layer.feature(i);
         if (f.type !== 3) continue; // ポリゴンのみ
         const props = f.properties as Record<string, string | number>;
-        if (debug && samples.length < 5) samples.push({ layer: name, ...props });
         const code = String(props.vt_code ?? props.ftCode ?? props.ftcode ?? "");
         const kindName = String(props.type ?? props.name ?? props.vt_name ?? "");
         let h = HEIGHT_BY_CODE[code];
@@ -64,5 +60,5 @@ export async function gsiBuildings(lat: number, lng: number, radius: number, fet
       }
     }
   }
-  return { buildings: out.slice(0, 3000), tiles: tiles.length, ...(debug ? { layers: [...layerNames], samples } : {}) };
+  return { buildings: out.slice(0, 3000), tiles: tiles.length };
 }

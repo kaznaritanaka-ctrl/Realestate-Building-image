@@ -13,7 +13,24 @@ interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   REINFOLIB_KEY?: string;
   REINFOLIB_RATE_LIMIT?: UpstreamRateLimiter;
+  RL_EVENT?: UpstreamRateLimiter;
   DB?: D1;
+}
+
+// /api/event のIP単位レート制限（週次監査 M-2 の残件）：バインディングが無い環境では制限せず、判定エラーでも本処理は止めない
+async function eventOverLimit(env: Env, req: Request): Promise<boolean> {
+  if (!env.RL_EVENT) return false;
+  try {
+    const { success } = await env.RL_EVENT.limit({ key: req.headers.get("cf-connecting-ip") ?? "unknown" });
+    return !success;
+  } catch { return false; }
+}
+
+function rateLimited(): Response {
+  return new Response(JSON.stringify({ error: "rate_limited" }), {
+    status: 429,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "retry-after": "60" },
+  });
 }
 
 // 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
@@ -29,6 +46,7 @@ export default {
   async fetch(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/api/zoning") return zoning(url, env, ctx);
+    if (url.pathname === "/api/event" && req.method === "POST" && await eventOverLimit(env, req)) return rateLimited();
     if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
     if (url.pathname === "/api/plateau") return plateau(url, ctx);
     if (url.pathname === "/api/buildings") return buildings(url, ctx);
@@ -120,11 +138,15 @@ function json(data: unknown, status = 200): Response {
 const SID_RE = /^[a-f0-9]{16,32}$/;
 
 async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
+  // 他サイトのページからの送信を弾く（Origin が無い送信は落とさない。非ブラウザには効かない補助策で、レート制限はルーター側のバインディングで行う）
+  const origin = req.headers.get("origin");
+  if (origin && origin !== new URL(req.url).origin) return new Response(null, { status: 403 });
   const text = await readTextUpTo(req, 2000);
   if (text === null) return new Response(null, { status: 413 });
   let body: { sid?: string; name?: string; props?: Record<string, unknown> };
   try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
-  if (!body.sid || !SID_RE.test(body.sid) || !body.name || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.sid !== "string" || !SID_RE.test(body.sid) || typeof body.name !== "string" || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
+  if (body.props !== undefined && (typeof body.props !== "object" || body.props === null || Array.isArray(body.props))) return new Response(null, { status: 400 });
   const props: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(body.props ?? {})) {
     if (!PROP_KEYS.has(k)) continue;
@@ -173,8 +195,9 @@ async function plateau(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => void
   const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 20 || lat > 46 || lng < 122 || lng > 154) return json({ error: "bad_request" }, 400);
   try {
-    const rg = await cachedJson(`gsi-rg/${lat.toFixed(4)},${lng.toFixed(4)}`,
-      `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
+    const rLat = Math.round(lat * 1e4) / 1e4, rLng = Math.round(lng * 1e4) / 1e4;
+    const rg = await cachedJson(`gsi-rg/${rLat},${rLng}`,
+      `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${rLat}&lon=${rLng}`, ctx) as { results?: { muniCd?: string; lv01Nm?: string } };
     const muni = rg.results?.muniCd?.padStart(5, "0");
     if (!muni) return json({ available: false, reason: "no_municipality" });
     // 政令市の区は、区コード → 市コードの順に試す（例：27127 → 27100）。それ以外の市町村はそのコードだけ
@@ -217,12 +240,13 @@ async function buildings(url: URL, ctx: { waitUntil: (p: Promise<unknown>) => vo
     return r.arrayBuffer();
   };
   try {
-    const res = await gsiBuildings(lat, lng, radius, fetchTile, url.searchParams.has("debug"));
+    const res = await gsiBuildings(lat, lng, radius, fetchTile);
     return new Response(JSON.stringify({ ...res, credit: "国土地理院最適化ベクトルタイル（建物の高さは種類からの推定）" }), {
-      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=86400" },
+      headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" },
     });
   } catch (e) {
-    return json({ buildings: [], error: String(e).slice(0, 200) });
+    console.log(JSON.stringify({ evt: "buildings_error", msg: String(e).slice(0, 200) }));
+    return json({ buildings: [], error: "error" });
   }
 }
 
@@ -241,10 +265,20 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     if (!r) {
       if (!(await budget.reserve())) return { status: 429, body: null };
       const up = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY! } });
-      if (up.status !== 200) return { status: up.status, body: null };
+      if (up.status !== 200) {
+        // 一時的な上流エラー（429・5xx）だけ60秒の負キャッシュにし、同じ失敗への再照会を抑える。認証・設定エラー（401/403等）はキャッシュしない
+        if (up.status === 429 || up.status >= 500) {
+          const neg = new Response("{}", { headers: { "content-type": "application/json", "cache-control": "public, max-age=60", "x-neg-status": String(up.status) } });
+          ctx.waitUntil(cache.put(k, neg));
+        }
+        try { await up.body?.cancel(); } catch { /* 接続の後始末に失敗しても本処理は続ける */ }
+        return { status: up.status, body: null };
+      }
       r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
       ctx.waitUntil(cache.put(k, r.clone()));
     }
+    const negStatus = r.headers.get("x-neg-status");
+    if (negStatus) return { status: Number(negStatus), body: null };
     try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
   };
   const [info, elevation, address] = await Promise.all([
