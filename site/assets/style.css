@@ -21,7 +21,7 @@
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
-  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  font-family: var(--font-body);
   color: var(--ink);
   background: var(--paper);
   line-height: 1.85;
@@ -168,3 +168,22 @@ footer.site { background: var(--soft); border-top: 1px solid var(--line); }
   .hero { grid-template-columns: minmax(0, 1fr); }
   .hero-preview { margin-top: 32px; }
 }
+
+/* ---- 文字：本文は端末のフォント（読み込みなし）。Windows では細く見える游ゴシック標準より先に、BIZ UDPゴシック・游ゴシック Medium を使う ---- */
+:root {
+  --font-body: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Noto Sans JP", "Yu Gothic Medium", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --font-head: "Zen Kaku Gothic New Head", var(--font-body);
+}
+/* 見出し専用のフォント（Zen Kaku Gothic New Bold、SIL OFL 1.1）。見出しで使う文字だけに絞った約数十KBのファイル */
+@font-face { font-family: "Zen Kaku Gothic New Head"; src: url("/assets/fonts/zen-kaku-gothic-new-bold-head.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-settings: "palt"; }
+/* タイトルは1行。幅が足りない画面では読点の位置でだけ折り返す */
+.hero h1 { grid-column: 1 / -1; margin-bottom: .7em; letter-spacing: .01em; }
+.hero h1 span { display: inline-block; }
+/* 入口のカード：6枚を同じ大きさでそろえる */
+.entry-cards { grid-auto-rows: 1fr; }
+.entry-card { justify-content: center; }
+.entry-card b { line-height: 1.4; }
+.entry-sample { border-style: dashed; background: var(--accent-soft); }
+.entry-sample:hover { background: var(--accent-soft); }
+.entry-sample b { color: var(--accent); }

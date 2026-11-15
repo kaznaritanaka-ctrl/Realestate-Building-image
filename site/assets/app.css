@@ -562,3 +562,6 @@ body.has-results .privacy-note#search-privacy { display: none; }
 .shape-pick span { font-size: 0.8125rem; color: var(--ink-soft); margin-right: 4px; }
 .shape-pick button { font: inherit; font-size: 0.8125rem; height: 34px; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
 .shape-pick button[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+/* 入力・結果の画面の見出しは文言がその場で変わるので、本文と同じ端末のフォントにする（サイト名だけ見出し用フォント） */
+h1, h2 { font-family: var(--font-body); font-feature-settings: normal; }
