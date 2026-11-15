@@ -52,6 +52,8 @@ if (!Object.prototype.hasOwnProperty.call(ZONES, state.zone)) state.zone = "unkn
 state.bcr = pctStr(state.bcr, 100);
 state.far = pctStr(state.far, 2000);
 if (Array.isArray(state.edges)) state.edges = state.edges.map(e => (EDGE_CHOICES.includes(e) ? e : "none"));
+else state.edges = [];
+if (!Array.isArray(state.points) || !state.points.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= 122 && q[0] <= 154 && q[1] >= 20 && q[1] <= 46)) state.points = [];
 if (!["api", "user", "guess", "none"].includes(state.zoneSource)) state.zoneSource = "none";
 applyFocusParam(state);
 const restored = applyShareHash(state);
@@ -88,7 +90,7 @@ function applyShareHash(st: State): boolean {
     const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
     const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))) as ShareData;
     if (d.v !== 1 || !Array.isArray(d.p) || d.p.length < 3 || d.p.length > 60) return false;
-    if (!d.p.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite))) return false;
+    if (!d.p.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= 122 && q[0] <= 154 && q[1] >= 20 && q[1] <= 46)) return false;
     if (typeof d.z !== "string" || !Object.prototype.hasOwnProperty.call(ZONES, d.z)) return false;
     const pick = (v: unknown, allowed: readonly string[], fallback: string | undefined) =>
       (typeof v === "string" && allowed.includes(v) ? v : fallback);
@@ -804,8 +806,8 @@ async function renderZone() {
       auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${esc(String(state.bcr || ZONES[state.zone].bcr))}％・容積率 ${esc(String(state.far || ZONES[state.zone].far))}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
-      const bcrTxt = z.bcr != null ? `${z.bcr}％` : `${ZONES[state.zone].bcr}％（代表値で試算）`;
-      const farTxt = z.far != null ? `${z.far}％` : `${ZONES[state.zone].far}％（代表値で試算）`;
+      const bcrTxt = z.bcr != null ? `${esc(String(z.bcr))}％` : `${esc(String(ZONES[state.zone].bcr))}％（代表値で試算）`;
+      const farTxt = z.far != null ? `${esc(String(z.far))}％` : `${esc(String(ZONES[state.zone].far))}％（代表値で試算）`;
       auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建ぺい率 ${bcrTxt}・容積率 ${farTxt}（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;
       guess.hidden = true;
     } else {
