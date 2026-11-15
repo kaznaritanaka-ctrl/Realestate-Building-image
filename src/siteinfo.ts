@@ -8,18 +8,21 @@ export function addressText(si: SiteInfo | null | undefined): string {
   return a ? `${a.pref}${a.city}${a.town}` : "";
 }
 
-const cache = new Map<string, Promise<SiteInfo>>();
+const cache = new Map<string, { promise: Promise<SiteInfo>; expires: number }>();
 
 export function fetchSiteInfo(lng: number, lat: number): Promise<SiteInfo> {
   const key = `${lng.toFixed(4)},${lat.toFixed(4)}`; // 約10m単位。照会は座標だけで、住所の文字列は送らない
-  let p = cache.get(key);
-  if (!p) {
-    p = fetch(`/api/site-info?lat=${lat}&lng=${lng}`)
+  let entry = cache.get(key);
+  if (!entry || entry.expires <= Date.now()) {
+    const promise = fetch(`/api/site-info?lat=${lat}&lng=${lng}`)
       .then(r => (r.ok ? r.json() : { available: false }))
       .catch(() => ({ available: false })) as Promise<SiteInfo>;
-    cache.set(key, p);
+    entry = { promise, expires: Infinity };
+    cache.set(key, entry);
+    const current = entry;
+    promise.then(si => { if (!si.available) current.expires = Date.now() + 60_000; });
   }
-  return p;
+  return entry.promise;
 }
 
 const str = (v: unknown) => (v == null ? "" : String(v));

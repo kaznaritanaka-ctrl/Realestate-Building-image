@@ -5,6 +5,27 @@ import { maxRectInMask, lngLatToLocal, area } from "./geom.ts";
 
 const rect = (w: number, d: number): [number, number][] => [[0, 0], [w, 0], [w, d], [0, d]];
 
+test("60頂点の共有敷地でも計算量の予算内に収まる", () => {
+  const polygon: [number, number][] = Array.from({ length: 60 }, (_, i) => {
+    const angle = 2 * Math.PI * i / 60;
+    const radius = 57 + 4 * Math.sin(i * 11.31) + 3 * Math.cos(i * 7.97);
+    return [radius * Math.cos(angle), radius * Math.sin(angle)];
+  });
+  const start = performance.now();
+  const result = computePlans({ polygon, roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "house" });
+  assert.equal(result.plans.length, 3);
+  assert.ok(performance.now() - start < 8000, "共有リンクの計算が8秒を超えた");
+});
+
+test("細長く入り組んだ60頂点の敷地でも計算が止まらない", () => {
+  const left: [number, number][] = Array.from({ length: 30 }, (_, i) => [i === 1 ? 0 : 2 * Math.sin(i * 1.7), 5000 * i / 29]);
+  const right: [number, number][] = Array.from({ length: 30 }, (_, i) => [20 + 2 * Math.sin(i * 1.9), 5000 * (29 - i) / 29]);
+  const start = performance.now();
+  const result = computePlans({ polygon: [...left, ...right], roadEdges: [{ index: 0, width: "6to12" }], zone: "r1", focusUse: "house" });
+  assert.equal(result.plans.length, 3);
+  assert.ok(performance.now() - start < 8000, "細長い共有敷地の計算が8秒を超えた");
+});
+
 test("10m×20m・第一種低層・前面4〜6m：容積率と3案の基本値", () => {
   const r = computePlans({ polygon: rect(10, 20), roadEdges: [{ index: 0, width: "4to6" }], zone: "r1low" });
   assert.equal(r.site.area, 200);

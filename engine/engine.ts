@@ -73,6 +73,9 @@ export interface EngineResult {
 const BASE_CELL = 0.25;      // 計算グリッドの細かさ（m）。大きな敷地では自動で粗くする
 const MAX_CELLS = 1_000_000; // グリッドのセル数の上限（計算時間の目安）
 const MAX_BBOX_SQM = 250_000; // 敷地を囲む長方形の上限（約25ha）
+const MAX_GRID_EDGE_CHECKS = 1_000_000; // 頂点が多い敷地はグリッドを粗くして計算量を抑える
+const MAX_GRID_AXIS = 2_000; // 極端に細長い敷地でも行・列数を上限内に収める
+const MAX_CANDIDATE_ANGLES = 2;
 const ROAD_SETBACK = 1.0;  // 道路側の後退（アプローチ・駐車の余地を含む目安）
 const SIDE_SETBACK = 0.5;  // 隣地側（民法234条の目安）
 const WIDTH_M: Record<RoadWidthClass, number> = { lt4: 4, "4to6": 4, "6to12": 6, gte12: 12 };
@@ -149,14 +152,18 @@ export function computePlans(input: SiteInput): EngineResult {
   // グリッド化：建物の向き φ（道路の辺に対する回転）ごとに、敷地を回した座標 (s,t) で置ける範囲を調べる
   const setbacks = P.map((_, i) => setbackOf(i));
   const rotate = (p: Vec2, ang: number): Vec2 => [p[0] * Math.cos(ang) - p[1] * Math.sin(ang), p[0] * Math.sin(ang) + p[1] * Math.cos(ang)];
-  function buildGrid(phi: number) {
+  function buildGrid(phi: number, skipOversized = false) {
     const Q = P.map(p => rotate(p, -phi));
     const us = Q.map(p => p[0]), vs = Q.map(p => p[1]);
     const umin = Math.min(...us), umax = Math.max(...us), vmin = Math.min(...vs), vmax = Math.max(...vs);
-    const bbox = (umax - umin) * (vmax - vmin);
-    if (bbox > MAX_BBOX_SQM) throw new Error("敷地が大きすぎます（敷地を囲む長方形で約25haまで対応）");
-    const CELL = Math.max(BASE_CELL, Math.sqrt(bbox / MAX_CELLS));
-    const cols = Math.max(1, Math.ceil((umax - umin) / CELL)), rows = Math.max(1, Math.ceil((vmax - vmin) / CELL));
+    const width = umax - umin, height = vmax - vmin;
+    const bbox = width * height;
+    if (bbox > MAX_BBOX_SQM) {
+      if (skipOversized) return null; // 候補の向きだけが上限を超える場合は道路向きを残す
+      throw new Error("敷地が大きすぎます（敷地を囲む長方形で約25haまで対応）");
+    }
+    const CELL = Math.max(BASE_CELL, Math.sqrt(bbox / MAX_CELLS), Math.sqrt((bbox * Q.length) / MAX_GRID_EDGE_CHECKS), Math.max(width, height) / MAX_GRID_AXIS);
+    const cols = Math.max(1, Math.ceil(width / CELL)), rows = Math.max(1, Math.ceil(height / CELL));
     const inside: Uint8Array[] = [], buildable: Uint8Array[] = [];
     for (let r = 0; r < rows; r++) {
       const ins = new Uint8Array(cols), bld = new Uint8Array(cols);
@@ -177,21 +184,26 @@ export function computePlans(input: SiteInput): EngineResult {
   }
   // 候補：道路に合わせた向き（0°）と、敷地の各辺に合わせた向き（±45°の範囲に正規化）
   const norm = (a: number) => { let x = ((a + Math.PI / 4) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2) - Math.PI / 4; if (Math.abs(x) < 1e-6) x = 0; return x; };
-  const g0 = buildGrid(0);
+  const g0 = buildGrid(0)!;
   let bestG = g0;
   if (g0.cells <= 300_000) {
-    const cands: number[] = [];
+    const cands: { angle: number; edgeLength: number }[] = [];
     for (let i = 0; i < P.length; i++) {
       const p1 = P[i], p2 = P[(i + 1) % P.length];
       const ang = norm(Math.atan2(p2[1] - p1[1], p2[0] - p1[0]));
-      if (Math.abs(ang) > 0.5 * Math.PI / 180 && !cands.some(c => Math.abs(c - ang) < Math.PI / 180)) cands.push(ang);
+      if (Math.abs(ang) <= 0.5 * Math.PI / 180) continue;
+      const length = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      const existing = cands.find(c => Math.abs(c.angle - ang) < Math.PI / 180);
+      if (existing) existing.edgeLength = Math.max(existing.edgeLength, length);
+      else cands.push({ angle: ang, edgeLength: length });
     }
-    for (const c of cands) { const g = buildGrid(c); if (g.area > bestG.area) bestG = g; }
+    const selected = cands.length <= MAX_CANDIDATE_ANGLES ? cands : cands.sort((a, b) => b.edgeLength - a.edgeLength).slice(0, MAX_CANDIDATE_ANGLES);
+    for (const c of selected) { const g = buildGrid(c.angle, true); if (g && g.area > bestG.area) bestG = g; }
     if (bestG.area < g0.area * 1.1) bestG = g0; // 差が小さければ道路向きを優先
   }
   const autoRotation = bestG.phi;
   const offset = ((input.rotationOffsetDeg ?? 0) * Math.PI) / 180;
-  const G = offset ? buildGrid(autoRotation + offset) : bestG;
+  const G = offset ? buildGrid(autoRotation + offset)! : bestG;
   const { Q, CELL, cols, rows, umin, vmin, inside, buildable } = G;
   const buildableRect = G.rect;
   if (!buildableRect || rectArea(buildableRect) < 12) {

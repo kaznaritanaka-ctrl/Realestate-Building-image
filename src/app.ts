@@ -7,6 +7,7 @@ import { track, areaBucket, SID } from "./track.ts";
 import { exportControlPackage } from "./export.ts";
 import { fetchSiteInfo, areaClass, siteInfoHtml, CONTROL_WARNING, type SiteInfo } from "./siteinfo.ts";
 import { buildSiteReport, MEMO_GROUPS } from "./report.ts";
+import { validateShareData, type ShareData } from "./share.ts";
 
 type EdgeChoice = RoadWidthClass | "none";
 interface State {
@@ -55,7 +56,6 @@ function applyFocusParam(st: State) {
   else if ((f === "rental" || f === "other") && !st.situation) st.situation = "land";
 }
 // 結果を開き直すリンク：入力の内容だけを URL の # 以降に入れる（# 以降はサーバーに送られない）
-interface ShareData { v: 1; p: Vec2[]; e: EdgeChoice[]; z: ZoneKey; b?: string; f?: string; u: "" | UseKey; s?: Situation; st?: ExteriorStyle; r?: number; zs?: State["zoneSource"]; sh?: BuildingShape }
 function encodeShare(): string {
   const d: ShareData = { v: 1, p: state.points.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6]), e: state.edges, z: state.zone, u: state.focus, s: state.situation, st: state.style, r: state.rotOffset || undefined, zs: state.zoneSource, sh: state.shape && state.shape !== "auto" ? state.shape : undefined };
   if (state.bcr) d.b = state.bcr; if (state.far) d.f = state.far;
@@ -69,13 +69,11 @@ function shareUrl(): string {
 }
 function applyShareHash(st: State): boolean {
   const m = location.hash.match(/(?:^#|&)r=([A-Za-z0-9_-]+)/);
-  if (!m) return false;
+  if (!m || m[1].length > 8192) return false;
   try {
     const bin = atob(m[1].replace(/-/g, "+").replace(/_/g, "/"));
-    const d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))) as ShareData;
-    if (d.v !== 1 || !Array.isArray(d.p) || d.p.length < 3 || d.p.length > 60) return false;
-    if (!d.p.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite))) return false;
-    if (!(d.z in ZONES)) return false;
+    const d = validateShareData(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+    if (!d) return false;
     Object.assign(st, {
       points: d.p, edges: (d.e ?? []).slice(0, d.p.length), zone: d.z, bcr: d.b ?? "", far: d.f ?? "",
       focus: d.u ?? "house", situation: d.s, style: d.st ?? st.style, rotOffset: d.r ?? 0, shape: d.sh ?? "auto",
@@ -809,7 +807,7 @@ async function renderZone() {
     const z = state.zoneApi;
     auto.classList.remove("muted-card", "control-card");
     if (state.zoneSource === "user") {
-      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${state.bcr || ZONES[state.zone].bcr}％・容積率 ${state.far || ZONES[state.zone].far}％<small>あなたが指定した値で計算します。</small>`;
+      auto.innerHTML = `<b class="big">${esc(ZONES[state.zone].label)}</b>建ぺい率 ${esc(String(state.bcr || ZONES[state.zone].bcr))}％・容積率 ${esc(String(state.far || ZONES[state.zone].far))}％<small>あなたが指定した値で計算します。</small>`;
       guess.hidden = true;
     } else if (z?.available && z.found && state.zoneSource === "api") {
       auto.innerHTML = `<b class="big">${esc(z.zoneName ?? "")}</b>建ぺい率 ${z.bcr ?? "—"}％・容積率 ${z.far ?? "—"}％（${esc(z.city ?? "")}）<small>${CREDIT}</small><small>境界付近や最新の変更は自治体でご確認ください。角地緩和・防火地域による緩和は考慮していません。</small>`;

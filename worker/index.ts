@@ -3,6 +3,8 @@
 import { AD_SLOTS } from "./affiliates.ts";
 import { gsiBuildings } from "./gsi-buildings.ts";
 import { siteInfo } from "./site-info.ts";
+import { readTextUpTo } from "./limited-body.ts";
+import { UpstreamBudget, type UpstreamRateLimiter } from "./upstream-budget.ts";
 
 interface D1 {
   prepare(sql: string): { bind(...v: unknown[]): { run(): Promise<unknown> } };
@@ -10,6 +12,7 @@ interface D1 {
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   REINFOLIB_KEY?: string;
+  REINFOLIB_RATE_LIMIT?: UpstreamRateLimiter;
   DB?: D1;
 }
 
@@ -43,6 +46,7 @@ async function zoning(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>
     return json({ error: "bad_request" }, 400);
   }
   if (!env.REINFOLIB_KEY) return json({ available: false, reason: "not_configured" }, 200);
+  if (!env.REINFOLIB_RATE_LIMIT) return json({ available: false, reason: "rate_limit_not_configured" }, 503);
 
   const n = 2 ** Z;
   const x = Math.floor(((lng + 180) / 360) * n);
@@ -56,6 +60,7 @@ async function zoning(url: URL, env: Env, ctx: { waitUntil: (p: Promise<unknown>
   let res = await cache.match(cacheKey);
   console.log(JSON.stringify({ evt: "zoning", tile: `${Z}/${x}/${y}`, cached: !!res }));
   if (!res) {
+    if (!(await new UpstreamBudget(env.REINFOLIB_RATE_LIMIT, 1).reserve())) return json({ available: false, reason: "rate_limited" }, 429);
     const upstream = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY } });
     if (!upstream.ok) return json({ available: false, reason: `upstream_${upstream.status}` }, 200);
     const body = await upstream.text();
@@ -115,8 +120,8 @@ function json(data: unknown, status = 200): Response {
 const SID_RE = /^[a-f0-9]{16,32}$/;
 
 async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
-  const text = await req.text();
-  if (text.length > 2000) return new Response(null, { status: 413 });
+  const text = await readTextUpTo(req, 2000);
+  if (text === null) return new Response(null, { status: 413 });
   let body: { sid?: string; name?: string; props?: Record<string, unknown> };
   try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
   if (!body.sid || !SID_RE.test(body.sid) || !body.name || !EVENT_NAMES.has(body.name)) return new Response(null, { status: 400 });
@@ -226,12 +231,15 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
   const lat = Number(url.searchParams.get("lat")), lng = Number(url.searchParams.get("lng"));
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 20 || lat > 46 || lng < 122 || lng > 154) return json({ error: "bad_request" }, 400);
   if (!env.REINFOLIB_KEY) return json({ available: false, reason: "not_configured" });
+  if (!env.REINFOLIB_RATE_LIMIT) return json({ available: false, reason: "rate_limit_not_configured" }, 503);
   const only = url.searchParams.get("only")?.split(",").filter(Boolean);
+  const budget = new UpstreamBudget(env.REINFOLIB_RATE_LIMIT, 36); // Normal full lookup needs at most 30 first-zoom tiles.
   const cache = (globalThis as unknown as { caches: { default: Cache } }).caches.default;
   const fetchJson = async (api: string) => {
     const k = new Request(`https://cache.internal/reinfolib/${encodeURIComponent(api.split("/external/")[1])}`);
     let r = await cache.match(k);
     if (!r) {
+      if (!(await budget.reserve())) return { status: 429, body: null };
       const up = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY! } });
       if (up.status !== 200) return { status: up.status, body: null };
       r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
@@ -245,6 +253,9 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     only && !only.includes("elevation") ? Promise.resolve(null) : gsiElevation(lat, lng, ctx),
     only && !only.includes("address") ? Promise.resolve(null) : gsiAddress(lat, lng, ctx),
   ]);
+  if (Object.values(info).some(v => (v as { error?: string }).error === "rate_limited")) {
+    return json({ available: false, reason: "rate_limited" }, 429);
+  }
   console.log(JSON.stringify({ evt: "site-info", apis: Object.keys(info).length }));
   return json({ available: true, info, elevation, address, source: "国土交通省 不動産情報ライブラリ", sourceUrl: "https://www.reinfolib.mlit.go.jp/" });
 }
