@@ -28,6 +28,13 @@ async function overLimit(rl: RateLimit | undefined, req: Request): Promise<boole
   } catch { return false; }
 }
 
+function rateLimited(): Response {
+  return new Response(JSON.stringify({ error: "rate_limited" }), {
+    status: 429,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "retry-after": "60" },
+  });
+}
+
 // 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
 const EVENT_NAMES = new Set([
   "lp_view", "wizard_view", "step_enter", "located", "shape_done", "road_set", "zone_resolved",
@@ -40,9 +47,9 @@ const Z = 15;
 export default {
   async fetch(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === "/api/event" && req.method === "POST" && await overLimit(env.RL_EVENT, req)) return json({ error: "rate_limited" }, 429);
-    if (url.pathname === "/api/site-info" && await overLimit(env.RL_SITEINFO, req)) return json({ error: "rate_limited" }, 429);
-    if ((url.pathname === "/api/zoning" || url.pathname === "/api/plateau" || url.pathname === "/api/buildings") && await overLimit(env.RL_API, req)) return json({ error: "rate_limited" }, 429);
+    if (url.pathname === "/api/event" && req.method === "POST" && await overLimit(env.RL_EVENT, req)) return rateLimited();
+    if (url.pathname === "/api/site-info" && await overLimit(env.RL_SITEINFO, req)) return rateLimited();
+    if ((url.pathname === "/api/zoning" || url.pathname === "/api/plateau" || url.pathname === "/api/buildings") && await overLimit(env.RL_API, req)) return rateLimited();
     if (url.pathname === "/api/zoning") return zoning(url, env, ctx);
     if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
     if (url.pathname === "/api/plateau") return plateau(url, ctx);
