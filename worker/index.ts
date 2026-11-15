@@ -7,10 +7,25 @@ import { siteInfo } from "./site-info.ts";
 interface D1 {
   prepare(sql: string): { bind(...v: unknown[]): { run(): Promise<unknown> } };
 }
+interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
 interface Env {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   REINFOLIB_KEY?: string;
   DB?: D1;
+  RL_EVENT?: RateLimit;
+  RL_SITEINFO?: RateLimit;
+  RL_API?: RateLimit;
+}
+
+// レート制限（週次監査 M-2 対応）：バインディングが無い環境では制限せず、判定エラーでも本処理は止めない
+async function overLimit(rl: RateLimit | undefined, req: Request): Promise<boolean> {
+  if (!rl) return false;
+  try {
+    const { success } = await rl.limit({ key: req.headers.get("cf-connecting-ip") ?? "unknown" });
+    return !success;
+  } catch { return false; }
 }
 
 // 記録してよいイベント名とプロパティ（個人を特定する情報・位置は受け付けない）
@@ -25,6 +40,9 @@ const Z = 15;
 export default {
   async fetch(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
     const url = new URL(req.url);
+    if (url.pathname === "/api/event" && req.method === "POST" && await overLimit(env.RL_EVENT, req)) return json({ error: "rate_limited" }, 429);
+    if (url.pathname === "/api/site-info" && await overLimit(env.RL_SITEINFO, req)) return json({ error: "rate_limited" }, 429);
+    if ((url.pathname === "/api/zoning" || url.pathname === "/api/plateau" || url.pathname === "/api/buildings") && await overLimit(env.RL_API, req)) return json({ error: "rate_limited" }, 429);
     if (url.pathname === "/api/zoning") return zoning(url, env, ctx);
     if (url.pathname === "/api/event" && req.method === "POST") return event(req, env, ctx);
     if (url.pathname === "/api/plateau") return plateau(url, ctx);
@@ -115,7 +133,7 @@ function json(data: unknown, status = 200): Response {
 const SID_RE = /^[a-f0-9]{16,32}$/;
 
 async function event(req: Request, env: Env, ctx: { waitUntil: (p: Promise<unknown>) => void }): Promise<Response> {
-  // 他サイトのページからの送信を弾く（Origin が無い送信は落とさない。非ブラウザには効かない補助策で、本命のレート制限は Cloudflare 側で行う）
+  // 他サイトのページからの送信を弾く（Origin が無い送信は落とさない。非ブラウザには効かない補助策で、レート制限はルーター側の Rate Limiting バインディングで行う）
   const origin = req.headers.get("origin");
   if (origin && origin !== new URL(req.url).origin) return new Response(null, { status: 403 });
   const declared = Number(req.headers.get("content-length"));
@@ -242,19 +260,20 @@ async function siteInfoRoute(url: URL, env: Env, ctx: { waitUntil: (p: Promise<u
     if (!r) {
       const up = await fetch(api, { headers: { "Ocp-Apim-Subscription-Key": env.REINFOLIB_KEY! } });
       if (up.status !== 200) {
-        // 上流エラーは60秒だけ負キャッシュし、失敗のたびに再照会して上流枠を消費するのを防ぐ
-        const neg = new Response(JSON.stringify({ __neg_status: up.status }), { headers: { "content-type": "application/json", "cache-control": "public, max-age=60" } });
-        ctx.waitUntil(cache.put(k, neg));
+        // 一時的な上流エラー（429・5xx）だけ60秒の負キャッシュにし、失敗のたびに再照会して上流枠を消費するのを防ぐ。認証・設定エラー（401/403等）はキャッシュしない
+        if (up.status === 429 || up.status >= 500) {
+          const neg = new Response("{}", { headers: { "content-type": "application/json", "cache-control": "public, max-age=60", "x-neg-status": String(up.status) } });
+          ctx.waitUntil(cache.put(k, neg));
+        }
+        try { await up.body?.cancel(); } catch { /* 接続の後始末に失敗しても本処理は続ける */ }
         return { status: up.status, body: null };
       }
       r = new Response(await up.text(), { headers: { "content-type": "application/json", "cache-control": "public, max-age=86400" } });
       ctx.waitUntil(cache.put(k, r.clone()));
     }
-    try {
-      const parsed = await r.json() as { __neg_status?: unknown };
-      if (parsed && typeof parsed === "object" && typeof parsed.__neg_status === "number") return { status: parsed.__neg_status, body: null };
-      return { status: 200, body: parsed };
-    } catch { return { status: 599, body: null }; }
+    const negStatus = r.headers.get("x-neg-status");
+    if (negStatus) return { status: Number(negStatus), body: null };
+    try { return { status: 200, body: await r.json() }; } catch { return { status: 599, body: null }; }
   };
   const [info, elevation, address] = await Promise.all([
     siteInfo(lat, lng, fetchJson, only),

@@ -55,6 +55,11 @@ if (Array.isArray(state.edges)) state.edges = state.edges.map(e => (EDGE_CHOICES
 else state.edges = [];
 if (!Array.isArray(state.points) || !state.points.every(q => Array.isArray(q) && q.length === 2 && q.every(Number.isFinite) && q[0] >= 122 && q[0] <= 154 && q[1] >= 20 && q[1] <= 46)) state.points = [];
 if (!["api", "user", "guess", "none"].includes(state.zoneSource)) state.zoneSource = "none";
+if (!["", "house", "rental", "other"].includes(state.focus)) state.focus = "house";
+if (state.situation !== undefined && !SITUATIONS.includes(state.situation)) state.situation = undefined;
+if (state.style !== undefined && !["wa", "white", "black"].includes(state.style)) state.style = undefined;
+if (state.shape !== undefined && !["auto", "rect", "L", "U"].includes(state.shape)) state.shape = "auto";
+if (state.rotOffset !== undefined && (typeof state.rotOffset !== "number" || !Number.isFinite(state.rotOffset))) state.rotOffset = 0;
 applyFocusParam(state);
 const restored = applyShareHash(state);
 state.zoneSource ??= "none"; state.zoneFetchedFor ??= ""; state.zoneApi ??= null;
@@ -99,7 +104,7 @@ function applyShareHash(st: State): boolean {
       edges: (Array.isArray(d.e) ? d.e : []).slice(0, d.p.length).map(e => (EDGE_CHOICES.includes(e) ? e : "none")),
       zone: d.z, bcr: pctStr(d.b, 100), far: pctStr(d.f, 2000),
       focus: pick(d.u, ["", "house", "rental", "other"], "house"), situation: pick(d.s, SITUATIONS, undefined),
-      style: pick(d.st, ["wa", "white", "black"], st.style), rotOffset: typeof d.r === "number" && Number.isFinite(d.r) ? d.r : 0,
+      style: pick(d.st, ["wa", "white", "black"], st.style), rotOffset: typeof d.r === "number" && Number.isFinite(d.r) ? d.r % 360 : 0,
       shape: pick(d.sh, ["auto", "rect", "L", "U"], "auto"),
       zoneSource: pick(d.zs, ["api", "user", "guess", "none"], "user"), sample: false, located: true, purposeSet: true, step: 6, zoneFetchedFor: "", zoneApi: null,
     });

@@ -12,6 +12,11 @@
     "run_worker_first": ["/api/*", "/go/*"]
   },
   "observability": { "enabled": true },
+  "ratelimits": [
+    { "name": "RL_EVENT", "namespace_id": "20261101", "simple": { "limit": 60, "period": 60 } },
+    { "name": "RL_SITEINFO", "namespace_id": "20261102", "simple": { "limit": 30, "period": 60 } },
+    { "name": "RL_API", "namespace_id": "20261103", "simple": { "limit": 120, "period": 60 } }
+  ],
   "d1_databases": [
     { "binding": "DB", "database_name": "realestate-db", "database_id": "2a185765-498e-483f-a518-efb83fc4d707", "migrations_dir": "migrations" }
   ],
