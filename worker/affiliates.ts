@@ -18,7 +18,7 @@ export const AD_SLOTS: AdSlot[] = [
     imp: "https://townlife-aff.com/data.php?i=645b492639451&m=6aeb5a722ec59",
     official: "https://www.town-life.jp/home/",
     advertiser: "タウンライフ家づくり",
-    text: "この方向で、複数社の間取りプランと資金計画を無料で取り寄せる",
+    text: "この方向で複数社の間取りプランと資金計画を無料で取り寄せる",
   },
   {
     slot: "land-use",
