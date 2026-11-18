@@ -115,10 +115,10 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.125rem; }
 }
 .app-body header.site { position: sticky; top: 0; z-index: 20; }
 
-.ad { display: block; text-decoration: none; color: var(--ink); background: #fff; border: 1px solid var(--accent); border-radius: var(--r-lg); padding: 12px 16px; margin: 12px 0; }
+.step-link { display: block; text-decoration: none; color: var(--ink); background: #fff; border: 1px solid var(--accent); border-radius: var(--r-lg); padding: 12px 16px; margin: 12px 0; }
 .ad:hover { background: var(--accent-soft); }
-.ad b { color: var(--accent); }
-.ad small { display: block; color: var(--ink-soft); font-size: 0.75rem; margin-top: 4px; }
+.step-link b { color: var(--accent); }
+.step-link small { display: block; color: var(--ink-soft); font-size: 0.75rem; margin-top: 4px; }
 
 .context { padding: 12px 16px; font-size: 0.875rem; }
 .context label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
@@ -150,9 +150,9 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.125rem; }
 /* 【PR】表記（結果ページ）*/
 .next-step { margin: 12px 0; }
 .next-step h3 { font-size: 0.875rem; color: var(--ink-soft); margin: 0 0 4px; font-weight: 700; }
-.next-step .ad { margin: 0; }
-.next-step.quiet .ad { border-color: var(--line); }
-.next-step.quiet .ad b { color: var(--ink); font-weight: 500; }
+.next-step .step-link { margin: 0; }
+.next-step.quiet .step-link { border-color: var(--line); }
+.next-step.quiet .step-link b { color: var(--ink); font-weight: 500; }
 
 /* ===== 2026-11-06 画面構成の作り直し：入力は一問一答、結果は3D＋下のシート ===== */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
