@@ -950,7 +950,7 @@ function renderResult() {
   viewer.setPlan(p, result.site.rotation);
   paintOrient();
   $("#plan-detail").innerHTML = planHtml(p);
-  renderAd(p.use);
+  renderAd(state.focus || p.use); // 広告は最初に選んだ使い道に合わせる（比べる形式のときだけ表示中の案に追随）
   if (state.sample) { $("#site-info-box").hidden = true; $("#area-warn").hidden = true; }
   else { $("#site-info-box").hidden = false; const pr = loadSiteInfo(); paintSiteInfo(); pr.then(() => paintSiteInfo()); }
   const s = result.site;
