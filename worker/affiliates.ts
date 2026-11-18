@@ -23,7 +23,8 @@ export const AD_SLOTS: AdSlot[] = [
   {
     slot: "land-use",
     use: "rental",
-    url: "",
+    url: "https://townlife-aff.com/link.php?i=A0000136&m=6aeb5a722ec59",
+    imp: "https://townlife-aff.com/data.php?i=A0000136&m=6aeb5a722ec59",
     official: "https://www.town-life.jp/land/",
     advertiser: "タウンライフ土地活用",
     text: "この規模で、複数社の収益化プランと見積を無料で比較する",
@@ -31,7 +32,8 @@ export const AD_SLOTS: AdSlot[] = [
   {
     slot: "land-use-other",
     use: "other",
-    url: "",
+    url: "https://townlife-aff.com/link.php?i=A0000136&m=6aeb5a722ec59",
+    imp: "https://townlife-aff.com/data.php?i=A0000136&m=6aeb5a722ec59",
     official: "https://www.town-life.jp/land/",
     advertiser: "タウンライフ土地活用",
     text: "この土地で、複数社の土地活用プランを無料で比較する",
