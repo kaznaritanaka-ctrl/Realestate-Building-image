@@ -1105,7 +1105,7 @@ async function renderAd(use: UseKey) {
   const clicked = adClicked().includes(ad.slot);
   box.innerHTML = `<div class="next-step${clicked ? " quiet" : ""}"><h3>次のステップ【PR】</h3>
     <a class="step-link" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}&amp;src=result" target="_blank" rel="sponsored noopener">
-    <b>${esc(ad.text)}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。複数社を選ぶと、プランを並べて比べやすくなります。3D・規模・参考情報は、申込みの有無にかかわらず無料で見られます。</small>` : ""}</a>${ad.imp ? `<img src="${esc(ad.imp)}" width="1" height="1" alt="" aria-hidden="true">` : ""}</div>`;
+    <b>${esc(ad.text).replace(/\n/g, '<br class="br-sp">')}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。複数社を選ぶと、プランを並べて比べやすくなります。3D・規模・参考情報は、申込みの有無にかかわらず無料で見られます。</small>` : ""}</a>${ad.imp ? `<img src="${esc(ad.imp)}" width="1" height="1" alt="" aria-hidden="true">` : ""}</div>`;
   box.querySelector("a.step-link")!.addEventListener("click", () => {
     const list = adClicked(); if (!list.includes(ad.slot)) { list.push(ad.slot); try { localStorage.setItem(AD_CLICK_KEY, JSON.stringify(list)); } catch { /* 保存できなくても続ける */ } }
   });
