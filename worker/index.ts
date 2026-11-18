@@ -51,7 +51,7 @@ export default {
     if (url.pathname === "/api/plateau") return plateau(url, ctx);
     if (url.pathname === "/api/buildings") return buildings(url, ctx);
     if (url.pathname === "/api/site-info") return siteInfoRoute(url, env, ctx);
-    if (url.pathname === "/api/ads") return json({ slots: AD_SLOTS.filter(s => s.url).map(({ slot, use, advertiser, text }) => ({ slot, use, advertiser, text })) });
+    if (url.pathname === "/api/ads") return json({ slots: AD_SLOTS.filter(s => s.url).map(({ slot, use, advertiser, text, imp }) => ({ slot, use, advertiser, text, ...(imp ? { imp } : {}) })) });
     if (url.pathname.startsWith("/go/")) return go(url, env, ctx);
     if (url.pathname.startsWith("/api/")) return json({ error: "not_found" }, 404);
     return env.ASSETS.fetch(req);

@@ -4,6 +4,7 @@ export interface AdSlot {
   slot: string;        // /go/:slot の識別子
   use: "house" | "rental" | "other" | "sell" | "inherit";
   url: string;         // ASPから発行されたアフィリエイトURL（未承認のうちは空）
+  imp?: string;        // ASPのインプレッション計測画像（通常タグに含まれていれば設定。結果ページで広告表示時に1回だけ読み込む）
   official?: string;   // 承認前にガイドページから案内するときの公式サイト（アフィリエイトではないURL）
   advertiser: string;  // 表示する広告主・サービス名
   text: string;        // リンク文言
@@ -13,7 +14,8 @@ export const AD_SLOTS: AdSlot[] = [
   {
     slot: "house-plan",
     use: "house",
-    url: "",
+    url: "https://townlife-aff.com/link.php?i=645b492639451&m=6aeb5a722ec59",
+    imp: "https://townlife-aff.com/data.php?i=645b492639451&m=6aeb5a722ec59",
     official: "https://www.town-life.jp/home/",
     advertiser: "タウンライフ家づくり",
     text: "この方向で、複数社の間取りプランと資金計画を無料で取り寄せる",
@@ -45,7 +47,8 @@ export const AD_SLOTS: AdSlot[] = [
   {
     slot: "inherit-consult",
     use: "inherit",
-    url: "",
+    url: "https://townlife-aff.com/link.php?i=6a97908a0dd80&m=6aeb5a722ec59",
+    imp: "https://townlife-aff.com/data.php?i=6a97908a0dd80&m=6aeb5a722ec59",
     official: "https://townlife-souzoku.jp/",
     advertiser: "タウンライフ不動産相続",
     text: "相続の相談先と見積もりを無料で比べる",
