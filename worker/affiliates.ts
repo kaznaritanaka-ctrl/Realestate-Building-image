@@ -41,7 +41,10 @@ export const AD_SLOTS: AdSlot[] = [
   {
     slot: "sell-assessment",
     use: "sell",
-    url: "",
+    // 売却単独プログラムは未申請（2026-11-18 本人判断）。当面は不動産相続の発行URLへ飛ばす暫定措置で、
+    // クリックは相続プログラム側に記録される。売却プログラムを申請・承認したら正規URLに差し替える。
+    url: "https://townlife-aff.com/link.php?i=6a97908a0dd80&m=6aeb5a722ec59",
+    imp: "https://townlife-aff.com/data.php?i=6a97908a0dd80&m=6aeb5a722ec59",
     official: "https://www.town-life.jp/fudousan/sell.html",
     advertiser: "タウンライフ不動産（売却）",
     text: "複数社の売却査定を無料で取り寄せる",
