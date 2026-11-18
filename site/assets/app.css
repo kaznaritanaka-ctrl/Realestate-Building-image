@@ -149,6 +149,8 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.125rem; }
 
 /* 【PR】表記（結果ページ）*/
 .next-step { margin: 12px 0; }
+.br-sp { display: none; }
+@media (max-width: 760px) { .br-sp { display: block; } }
 .next-step h3 { font-size: 0.875rem; color: var(--ink-soft); margin: 0 0 4px; font-weight: 700; }
 .next-step .step-link { margin: 0; }
 .next-step.quiet .step-link { border-color: var(--line); }
