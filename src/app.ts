@@ -1095,18 +1095,18 @@ const AD_CLICK_KEY = "tochi-mirai:adclick";
 function adClicked(): string[] { try { return JSON.parse(localStorage.getItem(AD_CLICK_KEY) || "[]"); } catch { return []; } }
 
 async function renderAd(use: UseKey) {
-  const box = $("#ad-box");
+  const box = $("#next-box");
   if (adSlots === null) {
-    try { adSlots = (await (await fetch("/api/ads")).json()).slots ?? []; } catch { adSlots = []; }
+    try { adSlots = (await (await fetch("/api/steps")).json()).slots ?? []; } catch { adSlots = []; }
   }
   const ad = adSlots!.find(a => a.use === use);
   $("#pr-top").hidden = !ad; // 広告があるときだけ、ページ上部にも【PR】を出す（タウンライフの指定：ファーストビュー＋任意の場所）
   if (!ad) { box.innerHTML = ""; return; }
   const clicked = adClicked().includes(ad.slot);
   box.innerHTML = `<div class="next-step${clicked ? " quiet" : ""}"><h3>次のステップ【PR】</h3>
-    <a class="ad" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}&amp;src=result" target="_blank" rel="sponsored noopener">
+    <a class="step-link" href="/go/${encodeURIComponent(ad.slot)}?sid=${SID}&amp;src=result" target="_blank" rel="sponsored noopener">
     <b>${esc(ad.text)}</b>${ad.advertiser ? `<small>${esc(ad.advertiser)}（外部サイト）へ移動します。複数社を選ぶと、プランを並べて比べやすくなります。3D・規模・参考情報は、申込みの有無にかかわらず無料で見られます。</small>` : ""}</a>${ad.imp ? `<img src="${esc(ad.imp)}" width="1" height="1" alt="" aria-hidden="true">` : ""}</div>`;
-  box.querySelector("a.ad")!.addEventListener("click", () => {
+  box.querySelector("a.step-link")!.addEventListener("click", () => {
     const list = adClicked(); if (!list.includes(ad.slot)) { list.push(ad.slot); try { localStorage.setItem(AD_CLICK_KEY, JSON.stringify(list)); } catch { /* 保存できなくても続ける */ } }
   });
   if (!adShown.has(ad.slot)) { adShown.add(ad.slot); track("ad_impression", { use }); }

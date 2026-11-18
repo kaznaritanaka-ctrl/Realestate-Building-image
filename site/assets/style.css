@@ -101,7 +101,7 @@ footer.site nav a { display: inline-block; margin-bottom: 4px; }
 
 /* ガイドページ */
 /* 【PR】表記の共通デザイン（ガイド・結果ページ・広告カード） */
-.pr-label, .pr-top, .ad .pr { display: inline-block; font-size: 0.75rem; line-height: 1.6; font-weight: 400; color: var(--ink-soft); background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 8px; margin: 0 0 8px; }
+.pr-label, .pr-top, .step-link .pr { display: inline-block; font-size: 0.75rem; line-height: 1.6; font-weight: 400; color: var(--ink-soft); background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 8px; margin: 0 0 8px; }
 .guide .lead { color: var(--ink-soft); }
 .guide .toc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; margin: 1.5em 0; }
 .guide .toc ol { margin: .4em 0; padding-left: 1.4em; line-height: 1.9; }
