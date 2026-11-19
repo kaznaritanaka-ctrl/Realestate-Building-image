@@ -12,7 +12,7 @@ test("市から管轄を引く", () => {
 });
 
 test("対象外の都道府県は null", () => {
-  assert.equal(houmukyokuFor("東京都", "新宿区"), null);
+  assert.equal(houmukyokuFor("北海道", "札幌市中央区"), null);
 });
 
 test("郡名の有無にかかわらず引ける", () => {
@@ -27,4 +27,12 @@ test("近畿の拡張分：京都市北区は本局、宇治市は宇治支局�
   assert.equal(houmukyokuFor("奈良県", "橿原市")?.office, "奈良地方法務局 中和支局");
   assert.equal(houmukyokuFor("滋賀県", "彦根市")?.office, "大津地方法務局 彦根支局");
   assert.equal(houmukyokuFor("和歌山県", "和歌山市")?.office, "和歌山地方法務局 本局");
+});
+
+test("関東の拡張分：千代田区は本局、松戸市は松戸支局、保土ケ谷区は神奈川出張所", async () => {
+  const { houmukyokuFor } = await import("./houmukyoku.ts");
+  assert.equal(houmukyokuFor("東京都", "千代田区")?.office, "東京法務局 本局");
+  assert.equal(houmukyokuFor("千葉県", "松戸市")?.office, "千葉地方法務局 松戸支局");
+  assert.equal(houmukyokuFor("神奈川県", "横浜市保土ケ谷区")?.office, "横浜地方法務局 神奈川出張所");
+  assert.equal(houmukyokuFor("埼玉県", "川口市")?.office, "さいたま地方法務局 川口出張所");
 });
