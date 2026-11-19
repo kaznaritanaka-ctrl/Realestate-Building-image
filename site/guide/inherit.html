@@ -50,10 +50,34 @@
 <h2>やることは大きく4つです</h2>
 <ol class="actions">
 <li><b>名義を確認する</b>現在の名義は、法務局の登記記録で確認できます。登記情報は、地図から取得できる外部サービス（<a href="https://kokonotoukibo.jp/" target="_blank" rel="noopener">ここの登記簿</a>）でも取れます。</li>
-<li><b>相続登記をする</b>申請先は、土地を管轄する法務局です。2024年4月から義務化され、期限は相続を知った日から3年以内（それより前に始まった相続は2027年3月31日まで）。詳しくは法務省の<a href="https://www.moj.go.jp/MINJI/minji05_00599.html" target="_blank" rel="noopener">公式案内</a>にまとまっています。</li>
+<li><b>相続登記をする</b>申請先は、土地を管轄する法務局です。2024年4月から義務化され、期限は相続を知った日から3年以内（それより前に始まった相続は2027年3月31日まで）。詳しくは法務省の<a href="https://www.moj.go.jp/MINJI/minji05_00599.html" target="_blank" rel="noopener">公式案内</a>にまとまっています。大阪府・兵庫県の土地は、<a href="#tool">下の欄</a>で市区町村から管轄を調べられます。</li>
 <li><b>相続税の申告が要るか確認する</b>申告が必要な場合、期限は相続の開始を知った日の翌日から10か月以内です。目安として、遺産の総額が基礎控除（3,000万円＋600万円×法定相続人の数）以下なら、申告は不要です。</li>
 <li><b>土地をどうするか決める</b>住む・活用する・手放すの方向は、土地の条件で変わります。まず条件の確認から始めるのが順番です（次の項目へ）。</li>
 </ol>
+
+
+<h2 id="tool">あなたの土地の手続きを確認する</h2>
+<p>大阪府・兵庫県の土地は、市区町村を選ぶと管轄の法務局が分かります。相続を知った日を入れると、期限も計算します。入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
+<div class="tool">
+<label for="tool-pref">土地のある都道府県</label>
+<select id="tool-pref"><option value="">選択してください</option></select>
+<label for="tool-city">市区町村</label>
+<select id="tool-city"><option value="">市区町村を選んでください</option></select>
+<label for="tool-chiban">地番（任意）</label>
+<input id="tool-chiban" type="text" placeholder="例：中島町123番地" autocomplete="off">
+<label for="tool-date">相続を知った日（任意）</label>
+<input id="tool-date" type="date">
+<p id="tool-office" class="office-line"></p>
+<table class="schedule"><thead><tr><th>手続き</th><th>期限</th><th>窓口</th></tr></thead><tbody id="tool-schedule"></tbody></table>
+<div class="exports">
+<button type="button" id="tool-md-copy">チェックリストをMarkdownでコピー</button>
+<button type="button" id="tool-txt-copy">メモ用テキストをコピー</button>
+<button type="button" id="tool-md-dl">Markdownファイルで保存</button>
+<button type="button" id="tool-ics">期限をカレンダーに追加（.ics）</button>
+</div>
+<p class="small" id="tool-ics-note"></p>
+<p class="small">MarkdownはNotionなどに貼るとチェックリストとして使えます。メモ用テキストはiPhoneのメモに貼って、メモ側のチェックリスト書式を当てると消し込める形になります。カレンダーは期限の1か月前と1週間前に知らせる設定で書き出します。</p>
+</div>
 
 <h2>自分の土地の条件を確認する</h2>
 <p>用途地域や建ぺい率・容積率、前面道路の条件によって、建てられる建物の規模が変わり、選べる方向も変わってきます。このサービスでは、敷地を描いて用途を選ぶと、建てられる規模の案を3つ、3Dで確認できます。家族で話し合うときのたたき台として使えます。</p>
@@ -103,5 +127,6 @@
 </div>
 </footer>
 <script src="/assets/guide.js" defer></script>
+<script src="/assets/inherit-tool.js" defer></script>
 </body>
 </html>
