@@ -866,7 +866,8 @@ function paintSiteInfo() {
   const ctrl = areaClass(siteInfo) === "control";
   const box = $("#site-info-box");
   const open = !!box.querySelector("details")?.open;
-  const html = siteInfoHtml(siteInfo, result.site.area).replace(/^<b>この土地の参考情報<\/b>/, "");
+  const c = state.points.length ? centroid() : null;
+  const html = siteInfoHtml(siteInfo, result.site.area, c ? { lat: c[1], lng: c[0] } : undefined).replace(/^<b>この土地の参考情報<\/b>/, "");
   const n = (html.match(/class="attn"/g) || []).length;
   // 市街化調整区域のときは、上部に「！注意事項がN件」の1行だけ出し、押すと本文を開く
   const warn = $("#area-warn");

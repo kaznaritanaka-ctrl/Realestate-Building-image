@@ -24,3 +24,13 @@ test("temporary upstream denial is retried after one minute", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("登記簿リンクは座標を4桁に丸めて出す／座標なしでは出さない", async () => {
+  const { siteInfoHtml } = await import("./siteinfo.ts");
+  const si = { available: true, info: {}, address: { pref: "兵庫県", city: "小野市", town: "中島町" } };
+  const withPt = siteInfoHtml(si, 100, { lat: 34.85604, lng: 134.94706 });
+  assert.ok(withPt.includes("https://kokonotoukibo.jp/#18/34.8560/134.9471"));
+  assert.ok(withPt.includes("この場所の登記簿を取得する"));
+  const withoutPt = siteInfoHtml(si, 100);
+  assert.ok(!withoutPt.includes("kokonotoukibo"));
+});
