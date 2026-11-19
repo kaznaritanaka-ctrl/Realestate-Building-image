@@ -36,8 +36,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 {
   const srcText = readFileSync("src/houmukyoku.ts", "utf8");
   const grouped = {};
-  for (const m of srcText.matchAll(/"((?:大阪府|兵庫県)[^"]+)":\s*\{\s*office:\s*"([^"]+)",\s*url:\s*"([^"]+)"\s*\}/g)) {
-    const pref = m[1].startsWith("大阪府") ? "大阪府" : "兵庫県";
+  for (const m of srcText.matchAll(/"([^"]+?(?:都|道|府|県)[^"]*)":\s*\{\s*office:\s*"([^"]+)",\s*url:\s*"([^"]+)"\s*\}/g)) {
+    const pref = m[1].match(/^(?:北海道|東京都|.+?県|.+?府)/)[0];
     const city = m[1].slice(pref.length);
     (grouped[pref] ??= {})[city] = { office: m[2], url: m[3] };
   }
