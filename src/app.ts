@@ -874,6 +874,11 @@ function paintSiteInfo() {
   const wasOpen = !!warn.querySelector("details")?.open;
   warn.innerHTML = ctrl ? `<details${wasOpen ? " open" : ""}><summary><span class="warn-mark" aria-hidden="true">！</span><span>注意事項が${Math.max(n, 1)}件あります</span><small>市街化調整区域ほか</small></summary><p>${CONTROL_WARNING}</p><p class="muted">ほかの注意事項は「この土地の参考情報」に載せています。</p></details>` : "";
   box.innerHTML = `<details${open ? " open" : ""}><summary><span>この土地の参考情報</span>${n ? `<span class="badge">確認したい点 ${n}</span>` : ""}</summary>${html}</details>`;
+  box.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach(b => b.addEventListener("click", async () => {
+    const t = b.dataset.copy || "";
+    try { await navigator.clipboard.writeText(t); alertBox("法務局の情報をコピーしました。"); }
+    catch { prompt("このテキストをコピーしてください", t); }
+  }));
 }
 
 // Step5
