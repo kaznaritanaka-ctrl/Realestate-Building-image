@@ -30,3 +30,20 @@ mkdirSync("site/assets/draco", { recursive: true });
 for (const f of ["draco_wasm_wrapper.js", "draco_decoder.wasm", "draco_decoder.js"]) copyFileSync(`node_modules/three/examples/jsm/libs/draco/${f}`, `site/assets/draco/${f}`);
 mkdirSync("site/assets/basis", { recursive: true });
 for (const f of ["basis_transcoder.js", "basis_transcoder.wasm"]) copyFileSync(`node_modules/three/examples/jsm/libs/basis/${f}`, `site/assets/basis/${f}`);
+
+// ガイドページ用：管轄法務局テーブル（src/houmukyoku.ts）を JSON 化して静的配信する（単一の正は TS 側）
+import { readFileSync, writeFileSync } from "node:fs";
+{
+  const srcText = readFileSync("src/houmukyoku.ts", "utf8");
+  const grouped = {};
+  for (const m of srcText.matchAll(/"((?:大阪府|兵庫県)[^"]+)":\s*\{\s*office:\s*"([^"]+)",\s*url:\s*"([^"]+)"\s*\}/g)) {
+    const pref = m[1].startsWith("大阪府") ? "大阪府" : "兵庫県";
+    const city = m[1].slice(pref.length);
+    (grouped[pref] ??= {})[city] = { office: m[2], url: m[3] };
+  }
+  for (const pref of Object.keys(grouped)) {
+    grouped[pref] = Object.fromEntries(Object.entries(grouped[pref]).sort(([a], [b]) => a.localeCompare(b, "ja")));
+  }
+  writeFileSync("site/assets/houmukyoku.json", JSON.stringify(grouped));
+  console.log("houmukyoku.json:", Object.values(grouped).reduce((n, g) => n + Object.keys(g).length, 0), "件");
+}

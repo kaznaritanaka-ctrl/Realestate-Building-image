@@ -187,3 +187,12 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .guide ol.actions { padding-left: 1.5em; }
 .guide ol.actions li { margin: 1em 0; line-height: 1.75; }
 .guide ol.actions b { display: block; font-size: 1.05rem; margin-bottom: .15em; }
+.guide .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px 14px; margin: 1.2em 0; }
+.guide .tool label { display: block; font-weight: 600; margin: .9em 0 .3em; }
+.guide .tool select, .guide .tool input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 1rem; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; color: var(--ink); }
+.guide .tool .office-line { margin: 1em 0 0; line-height: 1.7; }
+.guide .tool table.schedule { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
+.guide .tool table.schedule th, .guide .tool table.schedule td { border: 1px solid var(--line); padding: 8px; text-align: left; line-height: 1.5; }
+.guide .tool .exports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1em; }
+.guide .tool .exports button { padding: 10px 14px; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
+.guide .tool .exports button:disabled { opacity: .45; cursor: default; }
