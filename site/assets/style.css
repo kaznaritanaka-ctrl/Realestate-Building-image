@@ -184,3 +184,6 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .entry-sample { border-style: dashed; background: var(--accent-soft); }
 .entry-sample:hover { background: var(--accent-soft); }
 .entry-sample b { color: var(--accent); }
+.guide ol.actions { padding-left: 1.5em; }
+.guide ol.actions li { margin: 1em 0; line-height: 1.75; }
+.guide ol.actions b { display: block; font-size: 1.05rem; margin-bottom: .15em; }
