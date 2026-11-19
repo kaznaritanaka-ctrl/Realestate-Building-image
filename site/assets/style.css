@@ -157,6 +157,9 @@ footer.site { background: var(--soft); border-top: 1px solid var(--line); }
 .hero-preview { margin: 0; }
 .hero-preview .site-frame { padding: 12px; border: 2px dashed var(--accent); border-bottom: 2px solid var(--road); border-radius: var(--r-sm); background: #fff; }
 .hero-preview img { display: block; width: 100%; height: auto; border-radius: var(--r-sm); }
+.guide figure.sample { margin: 16px 0; }
+.guide figure.sample img { display: block; width: 100%; height: auto; border-radius: var(--r-sm); }
+.guide figure.sample figcaption { margin-top: 6px; font-size: 0.85em; color: var(--muted, #666); }
 .hero-preview figcaption { margin-top: 12px; font-size: 0.8125rem; color: var(--ink-soft); }
 @media (max-width: 900px) {
   .hero { grid-template-columns: minmax(0, 1fr); }
