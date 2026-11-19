@@ -11,8 +11,17 @@ test("市から管轄を引く", () => {
   assert.equal(houmukyokuFor("兵庫県", "小野市")?.office, "神戸地方法務局 社支局");
 });
 
-test("対象外の都道府県は null", () => {
-  assert.equal(houmukyokuFor("北海道", "札幌市中央区"), null);
+test("対象外の市区町村は null（北方領土の村は法務局の管轄一覧に載らない）", () => {
+  assert.equal(houmukyokuFor("北海道", "色丹村"), null);
+});
+
+test("四国・東北・北海道の拡張分：札幌市中央区は本局、帯広市は帯広支局、松山市は松山（本局）", async () => {
+  const { houmukyokuFor } = await import("./houmukyoku.ts");
+  assert.equal(houmukyokuFor("北海道", "札幌市中央区")?.office, "札幌法務局 本局");
+  assert.equal(houmukyokuFor("北海道", "帯広市")?.office, "釧路地方法務局 帯広支局");
+  assert.equal(houmukyokuFor("宮城県", "仙台市青葉区")?.office, "仙台法務局 本局");
+  assert.equal(houmukyokuFor("愛媛県", "松山市")?.office, "松山地方法務局 松山（本局）");
+  assert.equal(houmukyokuFor("高知県", "梼原町")?.office, "高知地方法務局 須崎支局");
 });
 
 test("郡名の有無にかかわらず引ける", () => {
