@@ -29,6 +29,16 @@ test("近畿の拡張分：京都市北区は本局、宇治市は宇治支局�
   assert.equal(houmukyokuFor("和歌山県", "和歌山市")?.office, "和歌山地方法務局 本局");
 });
 
+test("中部の拡張分：新潟市北区は本局、入善町は魚津支局、名古屋市千種区は本局", async () => {
+  const { houmukyokuFor } = await import("./houmukyoku.ts");
+  assert.equal(houmukyokuFor("新潟県", "新潟市北区")?.office, "新潟地方法務局 本局");
+  assert.equal(houmukyokuFor("新潟県", "新潟市秋葉区")?.office, "新潟地方法務局 新津支局");
+  assert.equal(houmukyokuFor("富山県", "入善町")?.office, "富山地方法務局 魚津支局");
+  assert.equal(houmukyokuFor("富山県", "上市町")?.office, "富山地方法務局 本局");
+  assert.equal(houmukyokuFor("愛知県", "名古屋市千種区")?.office, "名古屋法務局 本局");
+  assert.equal(houmukyokuFor("長野県", "長野市")?.office, "長野地方法務局 本局");
+});
+
 test("関東の拡張分：千代田区は本局、松戸市は松戸支局、保土ケ谷区は神奈川出張所", async () => {
   const { houmukyokuFor } = await import("./houmukyoku.ts");
   assert.equal(houmukyokuFor("東京都", "千代田区")?.office, "東京法務局 本局");
