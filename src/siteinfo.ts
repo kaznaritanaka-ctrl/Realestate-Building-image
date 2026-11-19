@@ -64,7 +64,7 @@ const row = (k: string, v: string, attn = false) => `<tr${attn ? ' class="attn"'
 const na = `<span class="muted">取得できませんでした</span>`;
 const none = `<span class="muted">該当なし</span>`;
 
-export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
+export function siteInfoHtml(si: SiteInfo | null, areaSqm: number, pt?: { lat: number; lng: number }): string {
   if (si === null) return `<b>この土地の参考情報</b><p class="muted">調べています…</p>`;
   if (!si.available) return `<b>この土地の参考情報</b><p class="muted">この地点の情報は取得できませんでした。</p>`;
   const rows: string[] = [];
@@ -72,6 +72,10 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
   if (addr) rows.push(row("所在（参考）", `${esc(addr)} 付近<small>座標から求めた町名までの目安です（地番は分かりません）。</small>`));
   const hm = si.address ? houmukyokuFor(si.address.pref, si.address.city) : null;
   if (hm) rows.push(row("管轄の法務局", `${esc(hm.office)} <button type="button" class="copy-btn" data-copy="${esc(hm.office)} ${esc(hm.url)}">コピー</button><small>相続登記などの申請先です。管轄は変わることがあるため、申請前に<a href="${esc(hm.url)}" target="_blank" rel="noopener">公式案内</a>でご確認ください。</small>`));
+  if (addr && pt) {
+    const tUrl = `https://kokonotoukibo.jp/#18/${pt.lat.toFixed(4)}/${pt.lng.toFixed(4)}`;
+    rows.push(row("登記簿", `<a href="${tUrl}" target="_blank" rel="noopener">この場所の登記簿を取得する</a><small>地図から登記情報を取得できる外部サービス「ここの登記簿」へ移動します（この地点付近の地図が開きます）。登記情報は証明書ではありません。</small>`));
+  }
 
   // 都市計画
   const ac = areaClass(si);
