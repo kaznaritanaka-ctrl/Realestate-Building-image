@@ -1,4 +1,5 @@
 // 「この土地の参考情報」：不動産情報ライブラリの各レイヤーを、地点ごとに読みやすく整える
+import { houmukyokuFor } from "./houmukyoku.ts";
 type Hit = { d?: number; props: Record<string, unknown> };
 type LayerRes = { label: string; found?: number; hits?: Hit[]; error?: string };
 export type SiteInfo = { available: boolean; info?: Record<string, LayerRes>; elevation?: { value: number; hsrc: string } | null; address?: { pref: string; city: string; town: string } | null };
@@ -69,6 +70,8 @@ export function siteInfoHtml(si: SiteInfo | null, areaSqm: number): string {
   const rows: string[] = [];
   const addr = addressText(si);
   if (addr) rows.push(row("所在（参考）", `${esc(addr)} 付近<small>座標から求めた町名までの目安です（地番は分かりません）。</small>`));
+  const hm = si.address ? houmukyokuFor(si.address.pref, si.address.city) : null;
+  if (hm) rows.push(row("管轄の法務局", `${esc(hm.office)} <button type="button" class="copy-btn" data-copy="${esc(hm.office)} ${esc(hm.url)}">コピー</button><small>相続登記などの申請先です。管轄は変わることがあるため、申請前に<a href="${esc(hm.url)}" target="_blank" rel="noopener">公式案内</a>でご確認ください。</small>`));
 
   // 都市計画
   const ac = areaClass(si);

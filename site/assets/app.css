@@ -144,6 +144,8 @@ section.wstep h2 { margin: 0 0 .6em; font-size: 1.125rem; }
 .siteinfo .kv td small { display: block; color: var(--ink-soft); font-size: 0.75rem; margin-top: 2px; }
 .siteinfo p.small { font-size: 0.75rem; margin: 8px 0 0; }
 .siteinfo .kv td { font-weight: 400; }
+.siteinfo .copy-btn { margin-left: 6px; padding: 2px 10px; font-size: 0.78rem; line-height: 1.5; border: 1px solid var(--line, #ccc); border-radius: 999px; background: #fff; color: var(--ink-soft); cursor: pointer; vertical-align: 2px; }
+.siteinfo .copy-btn:hover { background: var(--bg-soft, #f4f4f2); }
 .siteinfo .kv td small { background: none; padding: 0; margin-left: 0; border-radius: 0; }
 .siteinfo .si-item + .si-item { margin-top: 8px; }
 
