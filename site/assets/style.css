@@ -193,6 +193,11 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .guide .tool .office-line { margin: 1em 0 0; line-height: 1.7; }
 .guide .tool table.schedule { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
 .guide .tool table.schedule th, .guide .tool table.schedule td { border: 1px solid var(--line); padding: 8px; text-align: left; line-height: 1.5; }
+.guide table.jurisdiction { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
+.guide table.jurisdiction th, .guide table.jurisdiction td { border: 1px solid var(--line); padding: 8px; text-align: left; line-height: 1.5; }
+.guide table.jurisdiction th { background: #faf7f0; }
+.guide .pref-links { line-height: 2; }
+.guide .pref-links a { margin-right: .6em; white-space: nowrap; }
 .guide .tool .exports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1em; }
 .guide .tool .exports button { padding: 10px 14px; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
 .guide .tool .exports button:disabled { opacity: .45; cursor: default; }

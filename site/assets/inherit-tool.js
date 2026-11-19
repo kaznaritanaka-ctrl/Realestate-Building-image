@@ -1,5 +1,5 @@
 // 相続ガイドの「あなたの土地の手続き」ツール。
-// 入力はこの端末の中だけで処理し、どこにも送信しない。法務局データは /assets/houmukyoku.json（大阪府・兵庫県）。
+// 入力はこの端末の中だけで処理し、どこにも送信しない。法務局データは /assets/houmukyoku.json（全国）。
 (function () {
 "use strict";
 
@@ -205,6 +205,12 @@ var o = document.createElement("option");
 o.value = p; o.textContent = p;
 prefSel.appendChild(o);
 });
+var toolEl = document.querySelector(".tool");
+var preset = toolEl? toolEl.getAttribute("data-pref"): null;
+if (preset && data[preset]) {
+prefSel.value = preset;
+prefSel.dispatchEvent(new Event("change"));
+}
 }).catch(function () {
 $("tool-office").textContent = "法務局のデータを読み込めませんでした。法務省の公式案内でご確認ください。";
 });
