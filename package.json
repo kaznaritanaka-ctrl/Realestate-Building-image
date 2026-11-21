@@ -17,6 +17,7 @@
     "maplibre-gl": "5.24.1",
     "pbf": "^4.0.2",
     "pmtiles": "^4.5.0",
+    "polygon-clipping": "^0.15.7",
     "three": "^0.187.0"
   }
 }

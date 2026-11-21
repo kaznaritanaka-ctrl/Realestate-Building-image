@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { simplifyRing, area, lngLatToLocal, type Vec2 } from "./geom.ts";
+import { simplifyRing, pointInRing, ringForPoint, area, lngLatToLocal, type Vec2 } from "./geom.ts";
 
 const areaM2 = (ring: Vec2[]) => area(lngLatToLocal(ring).local);
 
@@ -32,6 +32,25 @@ test("鋭い角は残り、まっすぐな辺の途中点は落ちる", () => {
   const out = simplifyRing(withSpike, 8);
   assert.ok(out.some(p => p[0] === spike[0] && p[1] === spike[1]), "スパイクの先端が残ること");
   assert.ok(out.length <= 8);
+});
+
+test("pointInRing は内側と外側を判定する", () => {
+  const sq: Vec2[] = [[135.5, 34.75], [135.501, 34.75], [135.501, 34.751], [135.5, 34.751]];
+  assert.equal(pointInRing([135.5005, 34.7505], sq), true);
+  assert.equal(pointInRing([135.502, 34.7505], sq), false);
+  // L字の凹部は外側
+  const lShape: Vec2[] = [[135.5, 34.75], [135.501, 34.75], [135.501, 34.7505], [135.5005, 34.7505], [135.5005, 34.751], [135.5, 34.751]];
+  assert.equal(pointInRing([135.5007, 34.7507], lShape), false);
+  assert.equal(pointInRing([135.5002, 34.7507], lShape), true);
+});
+
+test("ringForPoint は点を含む部分を返し、なければ最大の部分を返す", () => {
+  const small: Vec2[][] = [[[135.5, 34.75], [135.5002, 34.75], [135.5002, 34.7502], [135.5, 34.7502], [135.5, 34.75]]];
+  const big: Vec2[][] = [[[135.501, 34.75], [135.5016, 34.75], [135.5016, 34.7506], [135.501, 34.7506], [135.501, 34.75]]];
+  const mp: Vec2[][][] = [small, big];
+  assert.equal(ringForPoint(mp, [135.5001, 34.7501]), small[0]);
+  assert.equal(ringForPoint(mp, [135.5013, 34.7503]), big[0]);
+  assert.equal(ringForPoint(mp, [135.6, 34.8]), big[0]);
 });
 
 test("4点の矩形はそのまま返る", () => {
