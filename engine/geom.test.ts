@@ -16,10 +16,22 @@ function circleWithCorners(n: number): Vec2[] {
 test("頂点の多いリングは上限以下に減り、面積は±5%以内", () => {
   const ring = circleWithCorners(200);
   const out = simplifyRing(ring);
-  assert.ok(out.length <= 40, `vertices=${out.length}`);
+  assert.ok(out.length <= 24, `vertices=${out.length}`);
   assert.ok(out.length >= 3);
   const ratio = areaM2(out) / areaM2(ring);
   assert.ok(Math.abs(ratio - 1) <= 0.05, `ratio=${ratio}`);
+});
+
+test("鋭い角は残り、まっすぐな辺の途中点は落ちる", () => {
+  // 矩形の上辺に細かい刻み（途中点）を入れ、下辺中央に鋭い突起（スパイク）を付けた形
+  const ring: Vec2[] = [[135.5, 34.75], [135.5004, 34.75], [135.5004, 34.7503]];
+  for (let i = 1; i <= 9; i++) ring.push([135.5004 - i * 0.00004, 34.7503]); // 上辺の途中点9個
+  ring.push([135.5, 34.7503], [135.5, 34.75]);
+  const spike: Vec2 = [135.5002, 34.74985]; // 下辺から外へ突き出す鋭い角
+  const withSpike: Vec2[] = [ring[0], ring[1], spike, ...ring.slice(2)];
+  const out = simplifyRing(withSpike, 8);
+  assert.ok(out.some(p => p[0] === spike[0] && p[1] === spike[1]), "スパイクの先端が残ること");
+  assert.ok(out.length <= 8);
 });
 
 test("4点の矩形はそのまま返る", () => {
