@@ -1,7 +1,8 @@
 import maplibregl from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
-import { lngLatToLocal, area, simplifyRing, type Vec2 } from "../engine/geom.ts";
+import { lngLatToLocal, area, simplifyRing, ringForPoint, type Vec2 } from "../engine/geom.ts";
+import { union } from "polygon-clipping";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import type { Viewer, ExteriorStyle, ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
@@ -214,12 +215,34 @@ function pickParcel(e: maplibregl.MapMouseEvent): boolean {
   if (oe && overlayHit(oe.clientX, oe.clientY)) return false;
   const f = map.queryRenderedFeatures(e.point, { layers: ["parcel-fill"] })[0];
   if (!f) return false;
-  const g = f.geometry;
   let ring: Vec2[] | undefined;
-  if (g.type === "Polygon") ring = g.coordinates[0] as Vec2[];
-  else if (g.type === "MultiPolygon") {
-    let best = -1;
-    for (const poly of g.coordinates) { const r = poly[0] as Vec2[]; const a = area(lngLatToLocal(r).local); if (a > best) { best = a; ring = r; } }
+  // ベクタタイルは図形をタイル境界で切断して格納するため、大きな筆は断片に分かれて返る。
+  // 画面内にある同じ筆（市区町村・大字・地番が一致）の断片を全部集めて結合し、元の形に戻す
+  const keyOf = (p: Record<string, unknown> | null | undefined) => `${p?.["市区町村名"] ?? ""}|${p?.["大字名"] ?? ""}|${p?.["地番"] ?? ""}`;
+  try {
+    const k = keyOf(f.properties);
+    const seen = new Set<string>();
+    const polys: Vec2[][][] = [];
+    for (const q of map.queryRenderedFeatures({ layers: ["parcel-fill"] })) {
+      if (keyOf(q.properties) !== k) continue;
+      const parts = q.geometry.type === "Polygon" ? [q.geometry.coordinates] : q.geometry.type === "MultiPolygon" ? q.geometry.coordinates : [];
+      for (const part of parts) {
+        const sig = JSON.stringify(part[0]);
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        polys.push(part as Vec2[][]);
+      }
+    }
+    if (polys.length === 1) ring = polys[0][0];
+    else if (polys.length > 1) ring = ringForPoint(union(polys[0], ...polys.slice(1)) as Vec2[][][], [e.lngLat.lng, e.lngLat.lat]);
+  } catch { ring = undefined; }
+  if (!ring) {
+    const g = f.geometry;
+    if (g.type === "Polygon") ring = g.coordinates[0] as Vec2[];
+    else if (g.type === "MultiPolygon") {
+      let best = -1;
+      for (const poly of g.coordinates) { const r = poly[0] as Vec2[]; const a = area(lngLatToLocal(r).local); if (a > best) { best = a; ring = r; } }
+    }
   }
   if (!ring) return false;
   if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ring = ring.slice(0, -1);

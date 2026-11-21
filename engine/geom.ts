@@ -122,3 +122,32 @@ export function simplifyRing(points: Vec2[], maxVertices = 24): Vec2[] {
   if (out.length < 3) return points.slice(0, Math.min(3, n));
   return out;
 }
+
+/** 点がリングの内側にあるか（レイキャスティング） */
+export function pointInRing(pt: Vec2, ring: Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * MultiPolygon（[lng,lat] のリングの集まり）の外周リングのうち、点を含むものを返す。
+ * どれにも含まれない場合は面積が最大の外周リングを返す。
+ * タイル断片を結合した結果から、クリックした部分の形を選ぶために使う
+ */
+export function ringForPoint(mp: Vec2[][][], pt: Vec2): Vec2[] | undefined {
+  let largest: Vec2[] | undefined;
+  let best = -1;
+  for (const poly of mp) {
+    const ring = poly[0];
+    if (!ring || ring.length < 3) continue;
+    if (pointInRing(pt, ring)) return ring;
+    const a = area(lngLatToLocal(ring).local);
+    if (a > best) { best = a; largest = ring; }
+  }
+  return largest;
+}
