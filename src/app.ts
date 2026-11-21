@@ -140,6 +140,7 @@ if (PARCELS_ON) maplibregl.addProtocol("pmtiles", new Protocol().tile);
 const EDGE_COLORS: Record<EdgeChoice, string> = { none: "#ffffff", lt4: "#f2b134", "4to6": "#f08a24", "6to12": "#e2572c", gte12: "#b8302a" };
 let edgeMarkers: maplibregl.Marker[] = [];
 let vertexMarkers: maplibregl.Marker[] = [];
+let selVertex: number | null = null; // ステップ2で選択中の頂点（削除用）
 
 map.on("load", () => {
   if (PARCELS_ON) addParcelLayers();
@@ -223,6 +224,7 @@ function pickParcel(e: maplibregl.MapMouseEvent): boolean {
   if (!ring) return false;
   if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ring = ring.slice(0, -1);
   if (ring.length < 3) return false;
+  selVertex = null;
   state.points = simplifyRing(ring).map(([x, y]): Vec2 => [x, y]);
   state.edges = [];
   const p = f.properties ?? {};
@@ -246,6 +248,7 @@ map.on("click", (e) => {
   if (t && t.closest("button, a, .maplibregl-ctrl, .map-tools, .style-pick, .orient")) return;
   const ev = e.originalEvent as MouseEvent | undefined;
   if (ev && overlayHit(ev.clientX, ev.clientY)) return;
+  selVertex = null;
   state.points.push([e.lngLat.lng, e.lngLat.lat]);
   state.edges = [];
   save(); redrawMap(); updateArea(); paintStepper();
@@ -263,18 +266,21 @@ function drawShape() {
 
 function redrawMap() {
   const pts = state.points;
+  if (selVertex !== null && (state.step !== 2 || selVertex >= pts.length)) selVertex = null;
   drawShape();
 
   vertexMarkers.forEach(m => m.remove());
   vertexMarkers = state.step === 2 ? pts.map((p, i) => {
-    const el = document.createElement("div"); el.className = "vtx"; el.title = `頂点${i + 1}（ドラッグで移動）`;
+    const el = document.createElement("div"); el.className = "vtx" + (i === selVertex ? " sel" : ""); el.title = `頂点${i + 1}（ドラッグで移動、タップで選択）`;
     const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(p).addTo(map);
     // ドラッグ中は形だけ描き直し、離したときに保存と面積更新
+    m.on("dragstart", () => { selVertex = i; });
     m.on("drag", () => { const ll = m.getLngLat(); state.points[i] = [ll.lng, ll.lat]; drawShape(); updateArea(); });
-    m.on("dragend", () => { save(); });
-    el.addEventListener("click", (ev) => ev.stopPropagation());
+    m.on("dragend", () => { save(); redrawMap(); });
+    el.addEventListener("click", (ev) => { ev.stopPropagation(); if (selVertex !== i) { selVertex = i; redrawMap(); } });
     return m;
   }) : [];
+  paintVertexDelBtn();
 
   const edgeFeats: GeoJSON.Feature[] = [];
   edgeMarkers.forEach(m => m.remove()); edgeMarkers = [];
@@ -303,6 +309,14 @@ function updateArea() {
   const ok = state.points.length >= 3;
   $("#area-val").textContent = ok ? `約${area(localPolygon()).toFixed(1)}㎡（約${(area(localPolygon()) / 3.30579).toFixed(1)}坪）` : `${state.points.length}点（3点以上必要）`;
   ($("#shape-done") as HTMLButtonElement).disabled = !ok;
+}
+
+// 頂点削除ボタンの状態を選択に同期する（形を保つため、頂点が3つのときは削除不可）
+function paintVertexDelBtn() {
+  const b = $("#vertex-del-btn") as HTMLButtonElement | null;
+  if (!b) return;
+  b.textContent = selVertex !== null ? `角${selVertex + 1}を削除` : "角を削除";
+  b.disabled = !(state.step === 2 && selVertex !== null && state.points.length > 3);
 }
 
 // ---------- ステップ遷移 ----------
@@ -791,8 +805,16 @@ $("#sample-btn").addEventListener("click", () => {
   save(); track("sample_used"); go(6);
 });
 
-$("#undo-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
-$("#clear-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#undo-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; selVertex = null; state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#clear-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; selVertex = null; state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#vertex-del-btn").addEventListener("click", () => {
+  if (selVertex === null || state.points.length <= 3) return;
+  state.points.splice(selVertex, 1);
+  state.edges = [];
+  selVertex = null;
+  if (PARCELS_ON) $("#parcel-picked").hidden = true;
+  save(); redrawMap(); updateArea(); paintStepper();
+});
 $("#restart-btn").addEventListener("click", () => {
   Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null, rotOffset: 0, situation: undefined });
   result = null; save(); track("restart"); paintSituation(); go(0);
