@@ -4,7 +4,7 @@
   X-Frame-Options: DENY
   Strict-Transport-Security: max-age=31536000
   Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src blob:; img-src 'self' data: blob: https://cyberjapandata.gsi.go.jp; connect-src 'self' blob: https://cyberjapandata.gsi.go.jp https://msearch.gsi.go.jp https://api.plateauview.mlit.go.jp https://assets.cms.plateau.reearth.io https://pub-b3e5420abab84e6e926020214bb573f7.r2.dev; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; child-src blob:; img-src 'self' data: blob: https://cyberjapandata.gsi.go.jp; connect-src 'self' blob: https://cyberjapandata.gsi.go.jp https://msearch.gsi.go.jp https://api.plateauview.mlit.go.jp https://assets.cms.plateau.reearth.io https://pub-b3e5420abab84e6e926020214bb573f7.r2.dev https://tiles.realestate.ai-investment-research.net; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # 3D用の素材（質感の画像・空の画像・車のモデル・デコーダー）は中身がめったに変わらないので、端末に1週間ためておく
 /assets/tex/*
