@@ -69,7 +69,7 @@
 
     <section class="wstep" data-step="2" hidden>
       <h2>敷地の形を描く</h2>
-      <p class="hint">地図を動かして中央の＋を土地の角に合わせ、「角を追加」を押します（地図を直接タップしても置けます）。置いた点は指でドラッグして直せます。</p>
+      <p class="hint">地図を動かして中央の＋を土地の角に合わせ、「角を追加」を押します（地図を直接タップしても置けます）。置いた点は指でドラッグして直せます。角をタップして選ぶと、その角を削除できます。</p>
       <p class="zoom-warn" id="zoom-warn" hidden>地図をもっと拡大してください（建物が判別できるくらいまで）。</p>
       <p class="hint" id="parcel-note" hidden>筆（土地の区画）をタップすると、その形を敷地に設定できます。筆の形は法務省の登記所備付地図データをもとにした目安です。公図の代わりにはなりません。実際の境界や面積は、登記資料や現地などでご確認ください。</p>
       <p class="hint" id="parcel-picked" role="status" hidden></p>
@@ -79,6 +79,7 @@
         <button class="btn add" id="add-btn" type="button"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>角を追加</button>
         <button class="btn" id="clear-btn" type="button">やり直す</button>
       </div>
+      <button class="btn wide vertex-del" id="vertex-del-btn" type="button" disabled>角を削除</button>
       <div class="actions">
         <button class="btn primary wide" id="shape-done" data-next="3" disabled>この形で決定</button>
       </div>
