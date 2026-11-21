@@ -74,3 +74,42 @@ export function maxRectInMask(mask: Uint8Array[], cols: number):
   }
   return best;
 }
+
+function douglasPeucker(pts: Vec2[], tol: number): Vec2[] {
+  const keep = new Uint8Array(pts.length);
+  keep[0] = keep[pts.length - 1] = 1;
+  const stack: [number, number][] = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [s, e] = stack.pop()!;
+    let maxD = 0, idx = -1;
+    for (let i = s + 1; i < e; i++) {
+      const d = distToSegment(pts[i], pts[s], pts[e]);
+      if (d > maxD) { maxD = d; idx = i; }
+    }
+    if (idx >= 0 && maxD > tol) { keep[idx] = 1; stack.push([s, idx], [idx, e]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+
+/**
+ * [lng,lat] のリングを maxVertices 以下に単純化する（閉合用の重複点なし・始点は保持）。
+ * 重心原点の等角投影（m）で Douglas-Peucker を行い、許容誤差を 0.5m から倍々で 8m まで上げる
+ */
+export function simplifyRing(points: Vec2[], maxVertices = 40): Vec2[] {
+  if (points.length <= maxVertices) return points;
+  const lng0 = points.reduce((s, q) => s + q[0], 0) / points.length;
+  const lat0 = points.reduce((s, q) => s + q[1], 0) / points.length;
+  const cosLat = Math.cos((lat0 * Math.PI) / 180);
+  const m = points.map(([lng, lat]): Vec2 => [(lng - lng0) * cosLat * 111320, (lat - lat0) * 110540]);
+  const closed = [...m, m[0]];
+  let out: Vec2[] = [];
+  let idx: number[] = [];
+  for (let tol = 0.5; tol <= 8; tol *= 2) {
+    const kept = douglasPeucker(closed.map((p, i) => [p[0], p[1], i] as unknown as Vec2), tol);
+    idx = kept.map(p => (p as unknown as number[])[2]).slice(0, -1); // 末尾は始点の複製
+    out = idx.map(i => points[i]);
+    if (out.length <= maxVertices) break;
+  }
+  if (out.length < 3) return points.slice(0, Math.min(3, points.length));
+  return out;
+}

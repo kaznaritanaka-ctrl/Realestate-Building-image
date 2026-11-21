@@ -1,6 +1,7 @@
 import maplibregl from "maplibre-gl";
+import { Protocol } from "pmtiles";
 import { type BuildingShape, applyExteriorStyle, computePlans, type EngineResult, type RoadWidthClass, type UseKey, type Plan } from "../engine/engine.ts";
-import { lngLatToLocal, area, type Vec2 } from "../engine/geom.ts";
+import { lngLatToLocal, area, simplifyRing, type Vec2 } from "../engine/geom.ts";
 import { ZONES, ZONE_ORDER, type ZoneKey } from "../engine/zoning.ts";
 import type { Viewer, ExteriorStyle, ViewSide } from "./viewer.ts";
 import { track, areaBucket, SID } from "./track.ts";
@@ -128,11 +129,20 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
+// 筆レイヤー（?parcels=1 のときだけ有効。無効時はプロトコル登録・ソース追加・R2 への取得を一切行わない）
+const PARCELS_ON = new URLSearchParams(location.search).get("parcels") === "1";
+const PARCEL_URL = "pmtiles://https://pub-b3e5420abab84e6e926020214bb573f7.r2.dev/osaka-hyogo.pmtiles";
+const PARCEL_LAYERS = ["parcel-fill", "parcel-line"];
+let parcelsVisible = true;
+let parcelsFailed = false;
+if (PARCELS_ON) maplibregl.addProtocol("pmtiles", new Protocol().tile);
+
 const EDGE_COLORS: Record<EdgeChoice, string> = { none: "#ffffff", lt4: "#f2b134", "4to6": "#f08a24", "6to12": "#e2572c", gte12: "#b8302a" };
 let edgeMarkers: maplibregl.Marker[] = [];
 let vertexMarkers: maplibregl.Marker[] = [];
 
 map.on("load", () => {
+  if (PARCELS_ON) addParcelLayers();
   map.addSource("draw", { type: "geojson", data: fc([]) });
   map.addSource("edges", { type: "geojson", data: fc([]) });
   map.addLayer({ id: "draw-fill", type: "fill", source: "draw", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#2f6f5e", "fill-opacity": 0.25 } });
@@ -141,12 +151,49 @@ map.on("load", () => {
   redrawMap();
 });
 
+function addParcelLayers() {
+  map.addSource("parcels", { type: "vector", url: PARCEL_URL, attribution: "法務省 登記所備付地図データ（G空間情報センター）" });
+  map.addLayer({ id: "parcel-fill", type: "fill", source: "parcels", "source-layer": "parcels", paint: { "fill-color": "#7a4fb5", "fill-opacity": 0.12 } });
+  map.addLayer({ id: "parcel-line", type: "line", source: "parcels", "source-layer": "parcels", paint: { "line-color": "#7a4fb5", "line-width": ["interpolate", ["linear"], ["zoom"], 14, 0.5, 18, 1.5] } });
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.id = "parcel-btn"; btn.className = "btn small"; btn.textContent = "筆を隠す";
+  btn.addEventListener("click", () => {
+    parcelsVisible = !parcelsVisible;
+    for (const id of PARCEL_LAYERS) map.setLayoutProperty(id, "visibility", parcelsVisible ? "visible" : "none");
+    btn.textContent = parcelsVisible ? "筆を隠す" : "筆を表示";
+    if (!parcelsVisible) map.getCanvas().style.cursor = "";
+  });
+  $("#map-tools").appendChild(btn);
+  $("#parcel-note").hidden = false;
+  map.on("error", (e) => {
+    if (parcelsFailed || (e as { sourceId?: string }).sourceId !== "parcels") return;
+    parcelsFailed = true; parcelsVisible = false;
+    btn.disabled = true; btn.textContent = "筆を読み込めませんでした";
+    for (const id of PARCEL_LAYERS) map.setLayoutProperty(id, "visibility", "none");
+    $("#parcel-note").hidden = true;
+  });
+}
+
 const MIN_DRAW_ZOOM = 16;
 const zoomWarn = () => { $("#zoom-warn").hidden = !(state.step === 2 && map.getZoom() < MIN_DRAW_ZOOM); };
 map.on("zoomend", zoomWarn);
 map.on("moveend", (e) => { if ((e as { originalEvent?: unknown }).originalEvent && state.step === 1 && !state.located) { state.located = true; save(); paintStepper(); track("located", { via: "move" }); } });
 
 // 画面上の点が地図の上に重ねたボタンの範囲内か
+// ホバーで pointer カーソル（rAF で間引く）
+if (PARCELS_ON) {
+  let raf = 0;
+  map.on("mousemove", (e) => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      const on = !parcelsFailed && parcelsVisible && state.step === 2 && map.getZoom() >= MIN_DRAW_ZOOM && map.getLayer("parcel-fill") !== undefined
+        && map.queryRenderedFeatures(e.point, { layers: ["parcel-fill"] }).length > 0;
+      map.getCanvas().style.cursor = on ? "pointer" : "";
+    });
+  });
+}
+
 function overlayHit(x: number, y: number): boolean {
   return $$("#map-tools button, .maplibregl-ctrl-group, .maplibregl-ctrl-attrib").some(el => {
     const r = el.getBoundingClientRect(); return r.width > 0 && x >= r.left - 4 && x <= r.right + 4 && y >= r.top - 4 && y <= r.bottom + 4;
@@ -157,9 +204,41 @@ for (const ev of ["pointerdown", "mousedown", "touchstart", "click", "dblclick"]
 // 頂点の近くを触ったときは追加しない（ドラッグのつもりで少しずれた場合）。指ではさらに広めに取る
 const COARSE = matchMedia("(pointer: coarse)").matches;
 const NEAR_PX = COARSE ? 36 : 16;
+// 筆をクリックして敷地にする（無効条件のときは false を返し、従来の頂点追加へ進む）
+function pickParcel(e: maplibregl.MapMouseEvent): boolean {
+  if (!PARCELS_ON || parcelsFailed || !parcelsVisible || state.step !== 2 || map.getZoom() < MIN_DRAW_ZOOM) return false;
+  const t = (e.originalEvent as MouseEvent | undefined)?.target as HTMLElement | null;
+  if (t && t.closest("button, a, .maplibregl-ctrl, .map-tools, .style-pick, .orient")) return false;
+  const oe = e.originalEvent as MouseEvent | undefined;
+  if (oe && overlayHit(oe.clientX, oe.clientY)) return false;
+  const f = map.queryRenderedFeatures(e.point, { layers: ["parcel-fill"] })[0];
+  if (!f) return false;
+  const g = f.geometry;
+  let ring: Vec2[] | undefined;
+  if (g.type === "Polygon") ring = g.coordinates[0] as Vec2[];
+  else if (g.type === "MultiPolygon") {
+    let best = -1;
+    for (const poly of g.coordinates) { const r = poly[0] as Vec2[]; const a = area(lngLatToLocal(r).local); if (a > best) { best = a; ring = r; } }
+  }
+  if (!ring) return false;
+  if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ring = ring.slice(0, -1);
+  if (ring.length < 3) return false;
+  state.points = simplifyRing(ring).map(([x, y]): Vec2 => [x, y]);
+  state.edges = [];
+  const p = f.properties ?? {};
+  const name = `${p["市区町村名"] ?? ""}${p["大字名"] ?? ""}`;
+  const el = $("#parcel-picked");
+  el.textContent = name && p["地番"] ? `${name} 地番${p["地番"]} の筆の形を敷地に設定しました。角をドラッグして調整できます。` : "選択した筆の形を敷地に設定しました。角をドラッグして調整できます。";
+  el.hidden = false;
+  save(); redrawMap(); updateArea(); paintStepper();
+  track("parcel_pick", { areaBucket: areaBucket(area(localPolygon())) });
+  return true;
+}
 map.on("click", (e) => {
   if (state.step !== 2) return;
   if (map.getZoom() < MIN_DRAW_ZOOM) { zoomWarn(); return; }
+  if (pickParcel(e)) return;
+  if (PARCELS_ON) $("#parcel-picked").hidden = true;
   const near = state.points.some(p => { const q = map.project(p as [number, number]); return Math.hypot(q.x - e.point.x, q.y - e.point.y) < NEAR_PX; });
   if (near) return;
   // 地図の上のボタン（地図/航空写真の切り替え・拡大縮小など）を押したときは追加しない
@@ -712,8 +791,8 @@ $("#sample-btn").addEventListener("click", () => {
   save(); track("sample_used"); go(6);
 });
 
-$("#undo-btn").addEventListener("click", () => { state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
-$("#clear-btn").addEventListener("click", () => { state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#undo-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; state.points.pop(); state.edges = []; save(); redrawMap(); updateArea(); paintStepper(); });
+$("#clear-btn").addEventListener("click", () => { if (PARCELS_ON) $("#parcel-picked").hidden = true; state.points = []; state.edges = []; state.sample = false; save(); redrawMap(); updateArea(); paintStepper(); });
 $("#restart-btn").addEventListener("click", () => {
   Object.assign(state, { points: [], edges: [], sample: false, located: false, purposeSet: false, zoneSource: "none", zoneFetchedFor: "", zoneApi: null, rotOffset: 0, situation: undefined });
   result = null; save(); track("restart"); paintSituation(); go(0);
