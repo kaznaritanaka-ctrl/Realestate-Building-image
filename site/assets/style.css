@@ -269,6 +269,13 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .pack-root .ip-toggle input[value="0"]:checked + span { background: #f1f3f3; color: var(--ink); }
 .pack-root .ip-toggle input[value="1"]:checked + span { background: var(--accent); color: #fff; }
 .pack-root .ip-toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -3px; }
+.pack-root .ip-exports-top { background: var(--accent-soft); border-radius: var(--r-md); padding: 4px 12px 10px; margin: .8em 0 0; }
+.pack-root .ip-exports-top h4 { margin: .6em 0 0; }
+.pack-root .ip-exports-top .exports { margin-top: .6em; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pack-root .ip-exports-top .exports button { padding: 8px 4px; font-size: .88rem; white-space: nowrap; }
+.pack-root .ip-exports-help summary { cursor: pointer; color: var(--accent); margin-top: .6em; }
+@media (min-width: 641px) { .pack-root .ip-exports-top .exports { grid-template-columns: repeat(3, 1fr); } }
+.pack-root .ip-exports-top .small { margin: .6em 0 0; }
 .guide .three-q { counter-reset: q; list-style: none; padding: 0; }
 .guide .three-q li { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 14px; margin: 8px 0; background: var(--card); line-height: 1.7; }
 .guide .three-q b { display: block; }
