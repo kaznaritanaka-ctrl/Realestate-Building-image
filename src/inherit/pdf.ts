@@ -37,6 +37,13 @@ function byDeadline(items: PackItem[]): PackItem[] {
   return [...items.filter((i) => !i.done).sort((x, y) => t(x) - t(y)), ...items.filter((i) => i.done).sort((x, y) => t(x) - t(y))];
 }
 
+/** やる事リストの窓口欄。担当が町名などで分かれるときは名前を1つだけ出し、電話は1枚目に任せる（3枚に収めるため） */
+function officeCell(i: PackItem): string {
+  const names = i.office.replace("（町名などで分かれます）", "").split("または");
+  if (names.length > 1) return `${esc(names[0])} ほか<br><small>町名などで分かれます。電話は1枚目</small>`;
+  return esc(i.office.replace("（町名などで分かれます）", "※")) + (i.tel ? `　<b class="pdf-nowrap">${esc(i.tel)}</b>` : "");
+}
+
 export function buildPdfHtml(pk: Pack): string {
   const a = pk.a;
   const land = (a.lpref ?? "") + (a.lcity ?? "");
@@ -59,12 +66,13 @@ export function buildPdfHtml(pk: Pack): string {
 
   const rows = byDeadline(pk.items).map((i) => {
     const left = i.done || i.daysLeft === null ? "" : i.daysLeft < 0 ? `<span class="pdf-past">${-i.daysLeft}日超過</span>` : `あと${i.daysLeft}日`;
-    return `<tr class="${i.done ? "pdf-done" : i.bucket === "past" ? "pdf-row-past" : ""}"><td class="pdf-box">${i.done ? "☑" : "□"}</td><td class="pdf-date">${i.due.date ? esc(dueLabel(i)) : `<small>${esc(i.due.text.replace(/（[^）]*）/g, "").slice(0, 28))}</small>`}</td><td class="pdf-left">${left}</td><td><b>${esc(i.p.title)}</b></td><td>${esc(i.office.replace("（町名などで分かれます）", "※"))}${i.tel ? `<br><b>${esc(i.tel)}</b>` : ""}</td><td>${esc(i.done ? "済" : i.p.action)}</td></tr>`;
+    return `<tr class="${i.done ? "pdf-done" : i.bucket === "past" ? "pdf-row-past" : ""}"><td class="pdf-box">${i.done ? "☑" : "□"}</td><td class="pdf-date">${i.due.date ? esc(dueLabel(i).replace("（目安）", "※目安")) : `<small>${esc(i.due.text.replace(/（[^）]*）/g, "").slice(0, 28))}</small>`}</td><td class="pdf-left">${left}</td><td><b>${esc(i.p.title)}</b></td><td>${officeCell(i)}</td><td>${esc(i.done ? "済" : i.p.action)}</td></tr>`;
   }).join("");
 
   const cautions = pk.cautions.map((k) => `<li class="${k.isStrong ? "pdf-strong" : ""}"><b>${esc(k.title)}</b><br>${esc(k.why)}</li>`).join("");
   const choices = (g: "仕方" | "土地") => pk.choices.filter((c) => c.group === g).map((c) => `<li><b>${esc(c.title)}</b>：${esc(c.fit)}。${esc(c.next)}<br><small>${esc(c.care)}</small></li>`).join("");
-  const foot = `<p class="pdf-foot">作成：土地の未来図（${fmtDateShort(pk.today)}）　一般的な手続きの目安です。期限が土日祝日にあたる場合の扱いや個別の判断は、各窓口・専門家にご確認ください。手続きと窓口の情報は${CHECKED_JA}に公式の案内で確認しました。</p>`;
+  const foot = `<p class="pdf-foot">作成：土地の未来図（${fmtDateShort(pk.today)}）　一般的な目安です。期限が土日祝日にあたる場合や個別の判断は各窓口・専門家へ。窓口と電話番号は${CHECKED_JA}時点の公式の案内によるもので、変わることがあります。</p>`;
+  const footShort = `<p class="pdf-foot">作成：土地の未来図（${fmtDateShort(pk.today)}）　電話番号は${CHECKED_JA}時点のものです。</p>`;
 
   return `<div class="ip-pdf" aria-hidden="true">
 <section class="pdf-page">
@@ -80,14 +88,13 @@ ${foot}
 <section class="pdf-page">
 <h2>やる事リスト（期限の近い順）</h2>
 <table class="pdf-todo"><colgroup><col style="width:6mm"><col style="width:34mm"><col style="width:17mm"><col style="width:56mm"><col style="width:62mm"><col></colgroup><thead><tr><th></th><th>期限</th><th>残り</th><th>手続き</th><th>窓口・電話</th><th>まずすること</th></tr></thead><tbody>${rows}</tbody></table>
-${foot}
 </section>
 <section class="pdf-page">
 <div class="pdf-cols pdf-p3">
 <div><h2>大きな失敗をしないために</h2><ul class="pdf-list">${cautions}</ul></div>
 <div><h2>選べること</h2><h3>相続の仕方</h3><ul class="pdf-list">${choices("仕方")}</ul><h3>土地・家をどうするか</h3><ul class="pdf-list">${choices("土地")}</ul></div>
 </div>
-${foot}
+${footShort}
 </section>
 </div>`;
 }

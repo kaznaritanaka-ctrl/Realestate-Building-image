@@ -13,6 +13,7 @@ interface OfficeData {
   tax: [string, string, string][];
   court: [string, string, string][];
   city?: [string, string, string][];
+  moj?: Record<string, [string, string]>;
   map: Record<string, Record<string, [number[], number[], number, number?]>>;
 }
 
@@ -95,7 +96,9 @@ export function mount(root: HTMLElement) {
   const cityOptions = (pref?: string, sel?: string) => [`<option value="">市区町村を選んでください</option>`, ...Object.keys((pref && data?.[pref]) || {}).map((c) => `<option${c === sel ? " selected" : ""}>${esc(c)}</option>`)].join("");
 
   function houmu(): Houmu | null {
-    return (a.lpref && a.lcity && data?.[a.lpref]?.[a.lcity]) || null;
+    const h = (a.lpref && a.lcity && data?.[a.lpref]?.[a.lcity]) || null;
+    const t = h && offices?.moj?.[h.office];
+    return h && t ? { ...h, tel: t[0] } : h;
   }
 
   function screen(i: number): string {

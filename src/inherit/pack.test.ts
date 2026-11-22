@@ -178,4 +178,16 @@ test("PDF用HTML：頭書きに窓口と電話、やる事リストは期限順�
   const todo = html.slice(html.indexOf("pdf-todo"));
   assert.ok(todo.indexOf("死亡届") > todo.indexOf("相続登記"), "済みは後ろ");
   assert.match(html, /4,800万円|基礎控除/);
+  assert.match(todo, /大淀税務署 ほか/, "担当が分かれる窓口は1つだけ出して1枚目に任せる");
+});
+
+test("PDF用HTML：法務局・役場の電話が入る", async () => {
+  const { contactRows } = await import("./pdf.ts");
+  const pk = buildPack({ dpref: "沖縄県", dcity: "石垣市", lpref: "沖縄県", lcity: "石垣市" }, D("2026-11-23"),
+    { office: "那覇地方法務局 石垣支局", url: "https://example.jp", tel: "0980-82-2004" },
+    { city: { name: "石垣市役所", tel: "0980-82-9911", url: "https://example.jp" } });
+  const rows = contactRows(pk);
+  assert.equal(rows[0].tel, "0980-82-2004");
+  assert.ok(rows.some((r) => r.kind === "市区町村役場" && r.tel === "0980-82-9911"));
+  assert.equal(rows.filter((r) => r.name === "石垣市役所").length, 1, "同じ市なら1行");
 });

@@ -294,14 +294,16 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
   .ip-pdf table { width: 100%; border-collapse: collapse; }
   .ip-pdf th, .ip-pdf td { border: 0.5pt solid #999; padding: 1.2mm 1.6mm; text-align: left; vertical-align: top; }
   .ip-pdf thead th { background: #eef4f1; }
+  .ip-pdf .pdf-contacts th, .ip-pdf .pdf-contacts td { padding: 0.8mm 1.6mm; }
   .ip-pdf .pdf-contacts tbody th { white-space: nowrap; background: #f6f8f7; }
-  .ip-pdf .pdf-tel { white-space: nowrap; font-weight: 700; font-size: 10pt; }
+  .ip-pdf .pdf-tel { white-space: nowrap; font-weight: 700; font-size: 9.5pt; }
+  .ip-pdf .pdf-nowrap { white-space: nowrap; }
   .ip-pdf .pdf-muted { font-weight: 400; color: #666; font-size: 8pt; }
   .ip-pdf small { font-size: 7.5pt; color: #444; }
   .ip-pdf a { color: #000; }
   .ip-pdf .pdf-tax { border: 0.5pt solid #999; padding: 2mm; margin: 0; }
   .ip-pdf .pdf-todo { table-layout: fixed; }
-  .ip-pdf .pdf-todo td, .ip-pdf .pdf-todo th { padding: 0.6mm 1.2mm; font-size: 7.8pt; line-height: 1.3; }
+  .ip-pdf .pdf-todo td, .ip-pdf .pdf-todo th { padding: 0.45mm 1.2mm; font-size: 7.5pt; line-height: 1.28; }
   .ip-pdf .pdf-todo tr { break-inside: avoid; }
   .ip-pdf .pdf-box { width: 5mm; font-size: 11pt; text-align: center; }
   .ip-pdf .pdf-date { width: 34mm; }
@@ -316,7 +318,7 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
   .ip-pdf .pdf-list { margin: 0; padding-left: 4mm; }
   .ip-pdf .pdf-list li { margin: 0 0 1.4mm; break-inside: avoid; }
   .ip-pdf .pdf-strong b { color: #b3261e; }
-  .ip-pdf .pdf-foot { font-size: 7pt; color: #555; margin-top: 3mm; }
+  .ip-pdf .pdf-foot { font-size: 7pt; color: #555; margin-top: 2mm; }
   body.print-pack header.site, body.print-pack footer.site, body.print-pack main > :not(.pack-root) { display: none !important; }
   body.print-pack .pack-root { border: 0; padding: 0; margin: 0; }
   .pack-root .no-print, .pack-root .ip-more summary { display: none !important; }

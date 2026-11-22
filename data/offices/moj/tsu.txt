@@ -1,0 +1,11 @@
+# source: https://houmukyoku.moj.go.jp/tsu/table/shikyokutou/all00.html (2026-11-23)
+鈴鹿出張所|059-382-1171
+四日市支局|059-353-4365
+伊賀支局|0595-21-0804
+松阪支局|0598-53-1501
+桑名支局|0594-32-5361
+伊勢支局|0596-28-6158
+熊野支局|0597-85-2310
+尾鷲出張所|0597-22-0598
+# source: https://houmukyoku.moj.go.jp/tsu/table/shikyokutou/all/honkyokudai.html (本局代表, 2026-11-23)
+本局|059-228-4191
