@@ -1,0 +1,5 @@
+# source: https://www.courts.go.jp/vc-files/courts/moushitatesaki/27_02teisyutusaki.pdf (管轄, 2026-11-23)
+# source: https://www.courts.go.jp/tottori/saiban/madoguti/index.html (電話：家事申立て窓口)
+鳥取家庭裁判所|0857-22-2171|鳥取市、岩美郡岩美町、八頭郡若桜町、八頭郡智頭町、八頭郡八頭町
+鳥取家庭裁判所倉吉支部|0858-22-2911|倉吉市、東伯郡三朝町、東伯郡琴浦町、東伯郡湯梨浜町、東伯郡北栄町
+鳥取家庭裁判所米子支部|0859-22-2408|米子市、境港市、西伯郡日吉津村、西伯郡大山町、西伯郡南部町、西伯郡伯耆町、日野郡日南町、日野郡日野町、日野郡江府町
