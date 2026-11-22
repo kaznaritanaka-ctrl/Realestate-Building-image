@@ -9,7 +9,16 @@ import {
 export const SITE = "https://realestate.ai-investment-research.net";
 export const PACK_PATH = "/guide/inherit";
 
-export interface Houmu { office: string; url: string }
+export interface Houmu { office: string; url: string; tel?: string }
+
+/** 窓口の連絡先（名称・電話・公式ページ）。part は町名などで管轄が分かれることを示す */
+export interface Contact { name: string; tel?: string; url?: string; part?: boolean }
+export interface Contacts {
+  tax?: Contact[]; // 亡くなった方の住所地の税務署
+  court?: Contact[]; // 亡くなった方の住所地の家庭裁判所
+  city?: Contact; // 亡くなった方の住所地の市区町村役場
+  landCity?: Contact; // 不動産のある市区町村役場
+}
 
 export type Bucket = "past" | "check" | "week" | "month" | "later" | "done";
 export const BUCKET_LABEL: Record<Bucket, string> = {
@@ -29,6 +38,7 @@ export interface PackItem {
   daysLeft: number | null;
   office: string; // 窓口の表示（実名が分かれば実名）
   officeUrl?: string;
+  tel?: string;
   strong: boolean;
   done: boolean;
 }
@@ -49,6 +59,7 @@ export interface Pack {
   choices: Choice[];
   tax: TaxInfo;
   houmu: Houmu | null;
+  contacts: Contacts;
 }
 
 // ---------- 回答の受け渡し（URLの # 以降。# 以降はサーバーに送られない） ----------
@@ -138,19 +149,27 @@ export function taxLines(t: TaxInfo): { head: string[]; notes: string[]; tail: s
 // ---------- パックの組み立て ----------
 const CHECK_IF_PAST = new Set(["shiboutodoke", "setainushi", "kenkouhoken", "nenkin"]);
 
-function officeText(p: Procedure, a: Answers, houmu: Houmu | null): { text: string; url?: string } {
+const joinNames = (l: Contact[]) => l.map((c) => c.name).join("または") + (l.length > 1 || l.some((c) => c.part) ? "（町名などで分かれます）" : "");
+const joinTels = (l: Contact[]) => l.map((c) => c.tel).filter(Boolean).join("／") || undefined;
+
+function officeText(p: Procedure, a: Answers, houmu: Houmu | null, ct: Contacts): { text: string; url?: string; tel?: string } {
   const land = (a.lpref ?? "") + (a.lcity ?? "");
   const dead = (a.dpref ?? "") + (a.dcity ?? "");
   switch (p.office) {
-    case "moj": return houmu ? { text: houmu.office, url: houmu.url } : { text: land ? `${land}を管轄する法務局` : OFFICE_LABEL.moj };
-    case "court": return { text: dead ? `${dead}を管轄する家庭裁判所` : OFFICE_LABEL.court, url: "https://www.courts.go.jp/saiban/tetuzuki/kasai/index.html" };
+    case "moj": return houmu ? { text: houmu.office, url: houmu.url, tel: houmu.tel } : { text: land ? `${land}を管轄する法務局` : OFFICE_LABEL.moj };
+    case "court":
+      if (ct.court?.length) return { text: joinNames(ct.court), url: ct.court[0].url, tel: joinTels(ct.court) };
+      return { text: dead ? `${dead}を管轄する家庭裁判所` : OFFICE_LABEL.court, url: "https://www.courts.go.jp/saiban/tetuzuki/kasai/index.html" };
     case "court-child": return { text: OFFICE_LABEL["court-child"], url: "https://www.courts.go.jp/saiban/tetuzuki/kasai/index.html" };
-    case "tax": return { text: dead ? `${dead}を管轄する税務署` : OFFICE_LABEL.tax, url: "https://www.nta.go.jp/about/organization/access/map.htm" };
-    case "farm": return { text: a.lcity ? `${a.lcity}の農業委員会` : OFFICE_LABEL.farm };
-    case "forest": return { text: a.lcity ? `${a.lcity}の林務担当` : OFFICE_LABEL.forest };
+    case "tax":
+      if (ct.tax?.length) return { text: joinNames(ct.tax), url: ct.tax[0].url, tel: joinTels(ct.tax) };
+      return { text: dead ? `${dead}を管轄する税務署` : OFFICE_LABEL.tax, url: "https://www.nta.go.jp/about/organization/access/map.htm" };
+    case "farm": return { text: a.lcity ? `${a.lcity}の農業委員会` : OFFICE_LABEL.farm, tel: ct.landCity?.tel };
+    case "forest": return { text: a.lcity ? `${a.lcity}の林務担当` : OFFICE_LABEL.forest, tel: ct.landCity?.tel };
     case "city":
-      if (p.id === "koteishisanzei" && land) return { text: `${land}の役場（固定資産税の担当）` };
-      return { text: OFFICE_LABEL.city };
+      if (p.id === "koteishisanzei" && land) return { text: `${ct.landCity?.name ?? land + "の役場"}（固定資産税の担当）`, url: ct.landCity?.url, tel: ct.landCity?.tel };
+      if (ct.city) return { text: ct.city.name, url: ct.city.url, tel: ct.city.tel };
+      return { text: dead ? `${dead}の役場` : OFFICE_LABEL.city };
     default: return { text: OFFICE_LABEL[p.office] };
   }
 }
@@ -172,7 +191,7 @@ export function ctxOf(a: Answers): Ctx {
   return { a, death, known };
 }
 
-export function buildPack(a: Answers, today: Date, houmu: Houmu | null = null): Pack {
+export function buildPack(a: Answers, today: Date, houmu: Houmu | null = null, contacts: Contacts = {}): Pack {
   const c = ctxOf(a);
   const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const doneSet = new Set(a.done ?? []);
@@ -180,9 +199,9 @@ export function buildPack(a: Answers, today: Date, houmu: Houmu | null = null): 
     const due = p.due(c);
     const daysLeft = due.date ? daysBetween(t0, due.date) : null;
     const strong = !!p.strong?.(a);
-    const o = officeText(p, a, houmu);
+    const o = officeText(p, a, houmu, contacts);
     const done = doneSet.has(p.id);
-    return { p, due, daysLeft, strong, done, bucket: done ? "done" : bucketOf(p, due, daysLeft, strong), office: o.text, officeUrl: o.url };
+    return { p, due, daysLeft, strong, done, bucket: done ? "done" : bucketOf(p, due, daysLeft, strong), office: o.text, officeUrl: o.url, tel: o.tel };
   });
   items.sort((x, y) => {
     const b = BUCKET_ORDER.indexOf(x.bucket) - BUCKET_ORDER.indexOf(y.bucket);
@@ -193,7 +212,7 @@ export function buildPack(a: Answers, today: Date, houmu: Houmu | null = null): 
   });
   const cautions = CAUTIONS.filter((k) => k.when(a)).map((k) => ({ ...k, isStrong: !!k.strong?.(a) }))
     .sort((x, y) => Number(y.isStrong) - Number(x.isStrong));
-  return { a, today: t0, death: c.death, known: c.known, items, cautions, choices: CHOICES, tax: taxInfo(a), houmu };
+  return { a, today: t0, death: c.death, known: c.known, items, cautions, choices: CHOICES, tax: taxInfo(a), houmu, contacts };
 }
 
 export function groupByBucket(items: PackItem[]): [Bucket, PackItem[]][] {

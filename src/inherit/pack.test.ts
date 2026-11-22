@@ -163,3 +163,31 @@ test("表（CSV）は済・未を1行ずつ書き出し、BOMつき・式に化�
   assert.ok(lines.some((l) => l.startsWith("未,")));
   assert.ok(!/,=/.test(csv));
 });
+
+test("PDF用HTML：頭書きに窓口と電話、やる事リストは期限順で済みは後ろ", async () => {
+  const { buildPdfHtml, contactRows } = await import("./pdf.ts");
+  const pk = buildPack({ death: "2026-08-01", dpref: "大阪府", dcity: "大阪市北区", lpref: "兵庫県", lcity: "明石市", done: ["shiboutodoke"] }, D("2026-11-23"),
+    { office: "神戸地方法務局 明石支局", url: "https://example.jp" },
+    { tax: [{ name: "大淀税務署", tel: "06-6372-7221", part: true }, { name: "北税務署", tel: "06-6313-3371", part: true }], court: [{ name: "大阪家庭裁判所", tel: "06-6943-5745" }] });
+  const rows = contactRows(pk);
+  assert.equal(rows[0].kind, "法務局");
+  assert.ok(rows.some((r) => r.name === "大淀税務署" && r.note));
+  assert.ok(rows.some((r) => r.tel === "06-6943-5745"));
+  const html = buildPdfHtml(pk);
+  assert.equal((html.match(/class="pdf-page"/g) || []).length, 3);
+  const todo = html.slice(html.indexOf("pdf-todo"));
+  assert.ok(todo.indexOf("死亡届") > todo.indexOf("相続登記"), "済みは後ろ");
+  assert.match(html, /4,800万円|基礎控除/);
+  assert.match(todo, /大淀税務署 ほか/, "担当が分かれる窓口は1つだけ出して1枚目に任せる");
+});
+
+test("PDF用HTML：法務局・役場の電話が入る", async () => {
+  const { contactRows } = await import("./pdf.ts");
+  const pk = buildPack({ dpref: "沖縄県", dcity: "石垣市", lpref: "沖縄県", lcity: "石垣市" }, D("2026-11-23"),
+    { office: "那覇地方法務局 石垣支局", url: "https://example.jp", tel: "0980-82-2004" },
+    { city: { name: "石垣市役所", tel: "0980-82-9911", url: "https://example.jp" } });
+  const rows = contactRows(pk);
+  assert.equal(rows[0].tel, "0980-82-2004");
+  assert.ok(rows.some((r) => r.kind === "市区町村役場" && r.tel === "0980-82-9911"));
+  assert.equal(rows.filter((r) => r.name === "石垣市役所").length, 1, "同じ市なら1行");
+});

@@ -3,3 +3,4 @@ node_modules/
 .dev.vars*
 .env*
 !.env.example
+scripts/offices/__pycache__/

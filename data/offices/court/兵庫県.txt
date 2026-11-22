@@ -1,0 +1,16 @@
+# source: https://www.courts.go.jp/vc-files/courts/moushitatesaki/14_02teisyutusaki.pdf (管轄, 2026-11-23)
+# source: https://www.courts.go.jp/kobe/about/syozai2/index.html (電話：代表, 2026-11-23)
+# source: https://www.courts.go.jp/kobe/vc-files/kobe/081013_dialinbangouichiran.pdf (本庁：家事申立受付係)
+# source: https://www.courts.go.jp/kobe/vc-files/kobe/file/01kobekateisaibansyosyozaichiichirann.pdf (尼崎支部)
+# source: https://www.courts.go.jp/kobe/about/syozai2/dialin_himezi/idnex.html (姫路支部：家事事件・記録係)
+神戸家庭裁判所|078-521-5930|神戸市中央区、神戸市東灘区、神戸市灘区、神戸市兵庫区、神戸市長田区、神戸市須磨区、神戸市垂水区、神戸市北区、三木市、三田市
+神戸家庭裁判所明石支部|078-912-3233|明石市、神戸市西区
+神戸家庭裁判所伊丹支部|072-779-3074|伊丹市、宝塚市、川西市、川辺郡猪名川町
+神戸家庭裁判所柏原支部|0795-72-0155|丹波市、丹波篠山市
+神戸家庭裁判所洲本支部|0799-25-2332|洲本市、淡路市、南あわじ市
+神戸家庭裁判所尼崎支部|06-7670-9547|尼崎市、西宮市、芦屋市
+神戸家庭裁判所姫路支部|079-281-2080|姫路市、相生市、赤穂市、赤穂郡上郡町、朝来市の一部、神崎郡福崎町、神崎郡市川町、神崎郡神河町、加古川市、高砂市、加古郡播磨町、加古郡稲美町
+神戸家庭裁判所社支部|0795-42-0123|西脇市、小野市、加西市、加東市、多可郡多可町
+神戸家庭裁判所龍野支部|0791-63-3920|たつの市、宍粟市、揖保郡太子町、佐用郡佐用町
+神戸家庭裁判所豊岡支部|0796-22-2881|豊岡市、養父市、朝来市の一部、美方郡香美町の一部
+神戸家庭裁判所浜坂出張所|0796-82-1169|美方郡新温泉町、美方郡香美町の一部
