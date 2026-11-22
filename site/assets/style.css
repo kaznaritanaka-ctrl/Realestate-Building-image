@@ -187,17 +187,81 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .guide ol.actions { padding-left: 1.5em; }
 .guide ol.actions li { margin: 1em 0; line-height: 1.75; }
 .guide ol.actions b { display: block; font-size: 1.05rem; margin-bottom: .15em; }
-.guide .tool { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px 14px; margin: 1.2em 0; }
-.guide .tool label { display: block; font-weight: 600; margin: .9em 0 .3em; }
-.guide .tool select, .guide .tool input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 1rem; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; color: var(--ink); }
-.guide .tool .office-line { margin: 1em 0 0; line-height: 1.7; }
-.guide .tool table.schedule { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
-.guide .tool table.schedule th, .guide .tool table.schedule td { border: 1px solid var(--line); padding: 8px; text-align: left; line-height: 1.5; }
 .guide table.jurisdiction { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .92rem; }
 .guide table.jurisdiction th, .guide table.jurisdiction td { border: 1px solid var(--line); padding: 8px; text-align: left; line-height: 1.5; }
 .guide table.jurisdiction th { background: #faf7f0; }
 .guide .pref-links { line-height: 2; }
 .guide .pref-links a { margin-right: .6em; white-space: nowrap; }
-.guide .tool .exports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1em; }
-.guide .tool .exports button { padding: 10px 14px; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
-.guide .tool .exports button:disabled { opacity: .45; cursor: default; }
+
+/* 相続の手続きパック（ウィザードと結果） */
+.pack-root { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px 18px; margin: 1.2em 0; }
+.pack-root .ip-progress { margin: .2em 0 .4em; font-size: .9rem; color: var(--ink-soft); font-weight: 600; }
+.pack-root .ip-bar { height: 6px; background: var(--accent-soft); border-radius: 3px; overflow: hidden; margin-bottom: .8em; }
+.pack-root .ip-bar span { display: block; height: 100%; background: var(--accent); }
+.pack-root .ip-q { border: 0; padding: 0; margin: 1.1em 0; min-width: 0; }
+.pack-root .ip-q legend { font-weight: 700; font-size: 1.02rem; line-height: 1.5; margin-bottom: .5em; padding: 0; }
+.pack-root .ip-note, .pack-root .ip-privacy { font-size: .85rem; color: var(--ink-soft); line-height: 1.6; margin: .5em 0 0; }
+.pack-root .ip-why { background: var(--accent-soft); border-radius: var(--r-md); padding: 10px 12px; font-size: .92rem; line-height: 1.7; }
+.pack-root .ip-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.pack-root .ip-opt { position: relative; }
+.pack-root .ip-opt input { position: absolute; opacity: 0; inset: 0; }
+.pack-root .ip-opt span { display: inline-block; min-height: 44px; box-sizing: border-box; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; line-height: 1.4; cursor: pointer; }
+.pack-root .ip-opt input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.pack-root .ip-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pack-root .ip-input, .pack-root .ip-select { display: block; width: 100%; box-sizing: border-box; padding: 10px; font-size: 1rem; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; color: var(--ink); margin: 0 0 8px; min-height: 44px; }
+.pack-root .ip-sub { margin-left: .2em; padding-left: .8em; border-left: 3px solid var(--accent-soft); }
+.pack-root .ip-nav { display: flex; gap: 10px; justify-content: space-between; margin-top: 1.4em; }
+.pack-root .ip-nav button, .pack-root .ip-toolbar button { min-height: 44px; padding: 10px 18px; border-radius: var(--r-md); font-size: 1rem; font-weight: 600; cursor: pointer; border: 1px solid var(--accent); background: #fff; color: var(--accent); }
+.pack-root .ip-nav .ip-next { background: var(--accent); color: #fff; margin-left: auto; }
+.pack-root .ip-toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pack-root .ip-toolbar button { font-size: .9rem; min-height: 38px; padding: 6px 12px; }
+.pack-root .ip-result h3 { margin: 1.2em 0 .4em; }
+.pack-root .ip-block { border-top: 1px solid var(--line); padding: 4px 0 0; margin-top: 1em; }
+.pack-root .ip-head { color: var(--ink-soft); font-size: .92rem; line-height: 1.7; }
+.pack-root .ip-warn { background: var(--warn-soft, #fff6e5); border-radius: var(--r-md); padding: 8px 12px; font-size: .92rem; }
+.pack-root .ip-bucket { margin: 1.2em 0 .4em; font-size: 1rem; }
+.pack-root .ip-bucket.past { color: #b3261e; }
+.pack-root .ip-bucket.check { color: var(--ink-soft); }
+.pack-root .ip-list { list-style: none; padding: 0; margin: 0; }
+.pack-root .ip-item { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; margin: 8px 0; background: #fff; }
+.pack-root .ip-item.strong { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+.pack-root .ip-check { display: flex; gap: 10px; align-items: flex-start; font-weight: 700; line-height: 1.5; cursor: pointer; }
+.pack-root .ip-check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+.pack-root .ip-check input:checked + .ip-title { text-decoration: line-through; color: var(--ink-soft); }
+.pack-root .ip-item p { margin: .3em 0 0 30px; line-height: 1.6; font-size: .93rem; }
+.pack-root .ip-due { font-weight: 600; }
+.pack-root .ip-days { display: inline-block; font-size: .8rem; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); margin-left: .3em; }
+.pack-root .ip-days.check { background: #eef0f1; color: var(--ink-soft); }
+.pack-root .ip-days.past { background: #fde7e5; color: #b3261e; }
+.pack-root .ip-meta { color: var(--ink-soft); }
+.pack-root .ip-consult { background: #fdf1f0; border-radius: var(--r-md); padding: 8px 10px; }
+.pack-root .ip-more { margin: .4em 0 0 30px; font-size: .9rem; }
+.pack-root .ip-more summary { cursor: pointer; color: var(--accent); }
+.pack-root .ip-more ul { padding-left: 1.2em; line-height: 1.7; }
+.pack-root .ip-more p { margin-left: 0; }
+.pack-root .ip-src { font-size: .82rem; color: var(--ink-soft); }
+.pack-root .ip-tax { background: var(--accent-soft); border-radius: var(--r-md); padding: 10px 14px; margin: 1.2em 0; line-height: 1.7; }
+.pack-root .ip-tax h4 { margin: .4em 0; }
+.pack-root .ip-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.pack-root .ip-card { border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 12px; background: #fff; font-size: .9rem; line-height: 1.6; }
+.pack-root .ip-card h5 { margin: .3em 0; font-size: 1rem; }
+.pack-root .ip-card p { margin: .25em 0; }
+.pack-root .ip-cautions { padding-left: 1.1em; line-height: 1.7; }
+.pack-root .ip-cautions li { margin: .7em 0; }
+.pack-root .ip-cautions li.strong b { color: #b3261e; }
+.pack-root .exports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1em; }
+.pack-root .exports button { min-height: 44px; padding: 10px 14px; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
+.pack-root .exports button:disabled { opacity: .45; cursor: default; }
+.guide .three-q { counter-reset: q; list-style: none; padding: 0; }
+.guide .three-q li { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 14px; margin: 8px 0; background: var(--card); line-height: 1.7; }
+.guide .three-q b { display: block; }
+.guide .tetsuzuki-list li { margin: .5em 0; line-height: 1.6; }
+@media print {
+  body.print-pack header.site, body.print-pack footer.site, body.print-pack main > :not(.pack-root) { display: none !important; }
+  body.print-pack .pack-root { border: 0; padding: 0; margin: 0; }
+  .pack-root .no-print, .pack-root .ip-more summary { display: none !important; }
+  .pack-root .ip-more { display: none; }
+  .pack-root .ip-item, .pack-root .ip-card { break-inside: avoid; }
+  .pack-root .ip-check input { appearance: none; -webkit-appearance: none; border: 1.5px solid #333; border-radius: 3px; }
+}
+

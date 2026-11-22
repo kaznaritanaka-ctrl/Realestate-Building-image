@@ -23,6 +23,10 @@ await build({
   entryPoints: ["src/lp.ts"], bundle: true, minify: true, format: "iife", target: ["es2020"],
   outfile: "site/assets/lp.js", logLevel: "info",
 });
+await build({
+  entryPoints: ["src/inherit/wizard.ts"], bundle: true, minify: true, format: "iife", target: ["es2020"],
+  outfile: "site/assets/inherit-pack.js", logLevel: "info",
+});
 copyFileSync("node_modules/maplibre-gl/dist/maplibre-gl.css", "site/assets/maplibre-gl.css");
 
 // 3D Tiles のデコーダー（Draco・Basis）を自前配信する（CSPで外部スクリプトを許可しないため）
@@ -81,7 +85,7 @@ import { readFileSync, writeFileSync } from "node:fs";
     if (!rows.length) throw new Error(`都道府県ページ: ${pref} のデータがありません`);
     const url = `https://realestate.ai-investment-research.net/guide/inherit/${slug}`;
     const title = `${pref}で土地を相続したら：市区町村ごとの管轄法務局と手続きの期限｜土地の未来図`;
-    const desc = `${pref}で土地や実家を相続したときの管轄法務局を、${pref}の全${rows.length}市区町村について一覧にしました。市区町村を選ぶと相続登記の期限も計算でき、チェックリストを書き出せます。`;
+    const desc = `${pref}で土地や実家を相続したときの管轄法務局を、${pref}の全${rows.length}市区町村について一覧にしました。質問に答えると、相続登記などの期限と必要な手続きを一覧にでき、チェックリストやカレンダーに書き出せます。`;
     const bureauLinks = [...new Map(rows.map((r) => [r.url, r.office.split(" ")[0].replace(/（本局）|\(本局\)/g, "")])).entries()]
       .map(([u, name]) => `<li><a href="${u}" target="_blank" rel="noopener">${esc(name)}の管轄区域一覧（公式）</a></li>`).join("\n");
     const tableRows = rows.map((r) => `<tr><td>${esc(r.city)}</td><td><a href="${r.url}" target="_blank" rel="noopener">${esc(r.office)}</a></td></tr>`).join("\n");
@@ -113,7 +117,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 "headline": "${pref}で土地を相続したら：市区町村ごとの管轄法務局と手続きの期限",
 "description": "${desc}",
 "datePublished": "2026-11-20",
-"dateModified": "2026-11-20",
+"dateModified": "2026-11-23",
 "inLanguage": "ja",
 "author": { "@type": "Person", "name": "田中 一成" },
 "publisher": { "@type": "Person", "name": "田中 一成" },
@@ -131,28 +135,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 <h1>${pref}で相続した土地の管轄法務局</h1>
 <p>相続登記（名義変更）の申請先は、土地の所在地を管轄する法務局です。<br>${pref}の${rows.length}市区町村について、管轄の法務局をまとめました。<br>2024年4月から相続登記は義務化され、期限は相続を知った日から3年以内です（それより前に始まった相続は2027年3月31日まで）。<br>手続き全体の流れは<a href="/guide/inherit">相続ガイド</a>にまとめています。</p>
 
-<h2 id="tool">あなたの土地の手続きを確認する</h2>
-<p>市区町村を選ぶと管轄の法務局が分かります。<br>相続を知った日を入れると、期限も計算します。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
-<div class="tool" data-pref="${pref}">
-<label for="tool-pref">土地のある都道府県</label>
-<select id="tool-pref"><option value="">選択してください</option></select>
-<label for="tool-city">市区町村</label>
-<select id="tool-city"><option value="">市区町村を選んでください</option></select>
-<label for="tool-chiban">地番（任意）</label>
-<input id="tool-chiban" type="text" placeholder="例：中島町123番地" autocomplete="off">
-<label for="tool-date">相続を知った日（任意）</label>
-<input id="tool-date" type="date">
-<p id="tool-office" class="office-line"></p>
-<table class="schedule"><thead><tr><th>手続き</th><th>期限</th><th>窓口</th></tr></thead><tbody id="tool-schedule"></tbody></table>
-<div class="exports">
-<button type="button" id="tool-md-copy">チェックリストをMarkdownでコピー</button>
-<button type="button" id="tool-txt-copy">メモ用テキストをコピー</button>
-<button type="button" id="tool-md-dl">Markdownファイルで保存</button>
-<button type="button" id="tool-ics">期限をカレンダーに追加（.ics）</button>
-</div>
-<p class="small" id="tool-ics-note"></p>
-<p class="small">MarkdownはNotionなどに貼るとチェックリストとして使えます。<br>メモ用テキストはiPhoneのメモに貼って、メモ側のチェックリスト書式を当てると消し込める形になります。<br>カレンダーは期限の1か月前と1週間前に知らせる設定で書き出します。</p>
-</div>
+<h2 id="tool">あなたの相続の手続きを確認する</h2>
+<p>6つの画面で質問に答えると、${pref}の管轄法務局を含めて、あなたに必要な手続きが期限の近い順に並びます。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
+<div id="inherit-pack" class="pack-root" data-pref="${pref}"><p class="small">読み込み中です。表示されない場合は、ブラウザのJavaScriptを有効にしてください。</p></div>
 
 <h2>${pref}の市区町村と管轄法務局</h2>
 <p>法務局の名前を押すと、公式の管轄区域一覧が開きます。</p>
@@ -176,7 +161,7 @@ ${bureauLinks}
 <li>本ページの手続きの説明は一般的な流れの紹介で、個別の事情への助言ではありません。<br>具体的な判断は専門家にご相談ください。</li>
 <li>「土地の未来図」の3Dと規模は参考のイメージと概算で、建築できることや売却価格を保証するものではありません。</li>
 </ul>
-<p class="updated">掲載日：2026年11月20日</p>
+<p class="updated">掲載日：2026年11月20日／更新日：2026年11月23日</p>
 </main>
 <footer class="site">
 <div class="wrap">
@@ -185,7 +170,7 @@ ${bureauLinks}
 </div>
 </footer>
 <script src="/assets/guide.js" defer></script>
-<script src="/assets/inherit-tool.js" defer></script>
+<script src="/assets/inherit-pack.js" defer></script>
 </body>
 </html>
 `;
@@ -193,4 +178,116 @@ ${bureauLinks}
     made++;
   }
   console.log("pref pages:", made, "ページ");
+}
+
+// 手続きごとの静的ページ（/guide/inherit/tetsuzuki/<id>）：手続きマスタ（src/inherit/master.ts）から生成する。単一の正はマスタ。
+{
+  mkdirSync("node_modules/.cache", { recursive: true });
+  await build({ entryPoints: ["src/inherit/master.ts"], bundle: true, format: "esm", platform: "node", outfile: "node_modules/.cache/inherit-master.mjs", logLevel: "warning" });
+  const { PROCEDURES, CONSULT, OFFICE_LABEL, CHECKED, CHECKED_JA, CATEGORY_ORDER } = await import(`../node_modules/.cache/inherit-master.mjs?${Date.now()}`);
+  const SITE = "https://realestate.ai-investment-research.net";
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const FOOTER = `<footer class="site">
+<div class="wrap">
+<nav><a href="/guide/house">土地に自宅を建てる前に、間取りプランを無料で比べる</a><a href="/guide/land-use">土地を収益化する前に、複数社の活用プランを無料で比べる</a><a href="/guide/sell">土地を手放す前に、複数社の売却査定を無料で比べる</a><a href="/guide/akiya">空き家・古い家のこれからを、選択肢ごとに整理する</a><a href="/guide/inherit">相続した土地・実家の進め方を、手続きと選択肢から整理する</a><a href="/terms">利用規約・注意事項</a><a href="/privacy">プライバシーポリシー</a><a href="/ad-policy">広告掲載方針</a><a href="/about">運営者情報</a></nav>
+<p>© 2026 土地の未来図</p>
+</div>
+</footer>`;
+  const head = (title, desc, url, jsonld) => `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${url}">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="${url}">
+<meta property="og:image" content="${SITE}/assets/ogp-v2.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/assets/style.css">
+<script type="application/ld+json">
+${JSON.stringify(jsonld)}
+</script>
+</head>
+<body>
+<header class="site">
+<div class="wrap"><a class="brand" href="/">土地の未来図<small>不動産3Dイメージサービス</small></a></div>
+</header>`;
+  const blank = { a: {}, death: null, known: null };
+  mkdirSync("site/guide/inherit/tetsuzuki", { recursive: true });
+  const urls = [];
+  for (const p of PROCEDURES) {
+    const url = `${SITE}/guide/inherit/tetsuzuki/${p.id}`;
+    const title = `${p.title}：期限と窓口、進め方｜相続の手続き｜土地の未来図`;
+    const due = p.due(blank).text;
+    const consult = CONSULT[p.office].map((c) => `<li>${c.url ? `<a href="${c.url}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)}${c.tel ? `（${esc(c.tel)}）` : ""}</li>`).join("\n");
+    const others = PROCEDURES.filter((x) => x.cat === p.cat && x.id !== p.id).map((x) => `<li><a href="/guide/inherit/tetsuzuki/${x.id}">${esc(x.title)}</a></li>`).join("\n");
+    const html = `${head(title, p.summary, url, { "@context": "https://schema.org", "@type": "Article", headline: p.title, description: p.summary, datePublished: CHECKED, dateModified: CHECKED, inLanguage: "ja", author: { "@type": "Person", name: "田中 一成" }, publisher: { "@type": "Person", name: "田中 一成" }, mainEntityOfPage: url, image: `${SITE}/assets/ogp-v2.png` })}
+<main class="wrap doc guide">
+<p class="small"><a href="/guide/inherit">相続した土地・実家の進め方</a> ＞ <a href="/guide/inherit/tetsuzuki">相続の手続き一覧</a> ＞ ${esc(p.cat)}</p>
+<h1>${esc(p.title)}</h1>
+<p class="lead">${esc(p.summary)}</p>
+<table class="jurisdiction"><tbody>
+<tr><th>期限</th><td>${esc(due)}</td></tr>
+<tr><th>窓口</th><td>${esc(OFFICE_LABEL[p.office])}</td></tr>
+<tr><th>まずすること</th><td>${esc(p.action)}</td></tr>
+</tbody></table>
+${p.docs?.length ? `<h2>主に要るもの</h2>\n<ul>\n${p.docs.map((d) => `<li>${esc(d)}</li>`).join("\n")}\n</ul>` : ""}
+${p.notes?.length ? `<h2>知っておきたいこと</h2>\n<ul>\n${p.notes.map((d) => `<li>${esc(d)}</li>`).join("\n")}\n</ul>` : ""}
+<h2>期限を過ぎたとき・迷ったときの相談先</h2>
+<ul>
+${consult}
+</ul>
+<h2>あなたの場合の期限を確認する</h2>
+<p>相続の手続きは、家族構成や財産の内容で必要なものが変わります。<br>いくつかの質問に答えると、この手続きを含めて、あなたに必要な手続きが期限の近い順に並びます。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
+<p class="cta-row"><a class="cta" href="/guide/inherit#tool">手続きパックを作る</a></p>
+${others ? `<h2>同じ段階の手続き</h2>\n<ul>\n${others}\n</ul>` : ""}
+<h2 id="notes">出典とご利用にあたって</h2>
+<ul class="small">
+${p.sources.map((s) => `<li><a href="${s.url}" target="_blank" rel="noopener">${esc(s.title)}</a></li>`).join("\n")}
+<li>内容は${CHECKED_JA}に公式の案内で確認しました。制度は変わることがあるため、手続きの前に窓口や公式の案内でご確認ください。</li>
+<li>一般的な手続きの紹介で、個別の事情への助言ではありません。具体的な判断は専門家にご相談ください。</li>
+</ul>
+<p class="updated">掲載日：${CHECKED_JA}</p>
+</main>
+${FOOTER}
+<script src="/assets/guide.js" defer></script>
+</body>
+</html>
+`;
+    writeFileSync(`site/guide/inherit/tetsuzuki/${p.id}.html`, html);
+    urls.push(url);
+  }
+  // 一覧ページ
+  const listUrl = `${SITE}/guide/inherit/tetsuzuki`;
+  const listDesc = "相続が起きたあとの手続きを、死亡直後・年金と保険・相続人と財産の確認・相続の仕方の判断・分け方・税金・名義変更・土地の届出の段階ごとに、期限と窓口つきで一覧にしました。";
+  const sections = CATEGORY_ORDER.map((c) => {
+    const ps = PROCEDURES.filter((p) => p.cat === c);
+    if (!ps.length) return "";
+    return `<h2>${esc(c)}</h2>\n<ul class="tetsuzuki-list">\n${ps.map((p) => `<li><a href="/guide/inherit/tetsuzuki/${p.id}">${esc(p.title)}</a><br><span class="small">${esc(p.due(blank).text)}</span></li>`).join("\n")}\n</ul>`;
+  }).join("\n");
+  writeFileSync("site/guide/inherit/tetsuzuki.html", `${head("相続の手続き一覧：期限と窓口を段階ごとに｜土地の未来図", listDesc, listUrl, { "@context": "https://schema.org", "@type": "Article", headline: "相続の手続き一覧", description: listDesc, datePublished: CHECKED, dateModified: CHECKED, inLanguage: "ja", author: { "@type": "Person", name: "田中 一成" }, publisher: { "@type": "Person", name: "田中 一成" }, mainEntityOfPage: listUrl, image: `${SITE}/assets/ogp-v2.png` })}
+<main class="wrap doc guide">
+<p class="small"><a href="/guide/inherit">相続した土地・実家の進め方</a> ＞ 相続の手続き一覧</p>
+<h1>相続の手続き一覧</h1>
+<p class="lead">${esc(listDesc)}</p>
+<p>あなたに必要なものだけを期限の近い順に並べるには、<a href="/guide/inherit#tool">手続きパック</a>を使ってください。</p>
+${sections}
+<p class="small">内容は${CHECKED_JA}に公式の案内で確認しました。一般的な手続きの紹介で、個別の事情への助言ではありません。</p>
+<p class="updated">掲載日：${CHECKED_JA}</p>
+</main>
+${FOOTER}
+<script src="/assets/guide.js" defer></script>
+</body>
+</html>
+`);
+  urls.unshift(listUrl);
+  // sitemap に未登録のURLを足す（既存の行は触らない）
+  let sm = readFileSync("site/sitemap.xml", "utf8");
+  const add = urls.filter((u) => !sm.includes(`<loc>${u}</loc>`)).map((u) => `  <url>\n    <loc>${u}</loc>\n    <lastmod>${CHECKED}</lastmod>\n  </url>\n`).join("");
+  if (add) { sm = sm.replace("</urlset>", add + "</urlset>"); writeFileSync("site/sitemap.xml", sm); }
+  console.log("tetsuzuki pages:", PROCEDURES.length, "ページ＋一覧");
 }
