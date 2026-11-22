@@ -48,6 +48,11 @@ function countSelect(name: string, val: number | undefined, zeroLabel: string, m
   return `<select name="${name}" class="ip-select">${opts.join("")}</select>`;
 }
 
+/** 「まだ／済んだ」の切り替え（2択のラジオ） */
+function doneToggle(id: string, title: string, done: boolean): string {
+  return `<div class="ip-toggle" role="radiogroup" aria-label="${esc(title)}は済みましたか"><label><input type="radio" name="t_${id}" value="0" data-done="${id}"${done ? "" : " checked"}><span>まだ</span></label><label><input type="radio" name="t_${id}" value="1" data-done="${id}"${done ? " checked" : ""}><span>済んだ</span></label></div>`;
+}
+
 const STEPS = ["いつ", "家族", "遺言と借金", "不動産", "亡くなった方の住所", "そのほかの財産", "済ませた手続き"] as const;
 
 export function mount(root: HTMLElement) {
@@ -99,9 +104,9 @@ export function mount(root: HTMLElement) {
         const list = PROCEDURES.filter((p) => p.when(a));
         const groups = CATEGORY_ORDER.map((c) => {
           const ps = list.filter((p) => p.cat === c);
-          return ps.length ? `<p class="ip-cat">${esc(c)}</p><div class="ip-done-list">${ps.map((p) => `<label class="ip-done-opt"><input type="checkbox" name="done" value="${p.id}"${done.has(p.id) ? " checked" : ""}><span>${esc(p.title)}</span></label>`).join("")}</div>` : "";
+          return ps.length ? `<p class="ip-cat">${esc(c)}</p><div class="ip-done-list">${ps.map((p) => `<div class="ip-done-opt${done.has(p.id) ? " is-done" : ""}"><span class="ip-done-title">${esc(p.title)}</span>${doneToggle(p.id, p.title, done.has(p.id))}</div>`).join("")}</div>` : "";
         }).join("");
-        return q("もう済ませた手続きはありますか（いくつでも）", groups, "済んだものは「済んだこと」に分けて表示します。結果の画面でもあとからチェックを付け外しできます。迷うものはチェックせずに進んでください。");
+        return q("もう済ませた手続きはありますか", groups, "済ませた手続きは「済んだ」に切り替えてください。結果では「済んだこと」に分けて表示します。結果の画面でもあとから切り替えられます。迷うものは「まだ」のまま進んでください。");
       }
     }
   }
@@ -130,7 +135,7 @@ export function mount(root: HTMLElement) {
         else { a.dpref = a.lpref; a.dcity = a.lcity; }
         break;
       case 5: a.bank = s("bank") as YNU; a.pension = s("pension") as YNU; a.insurance = s("insurance") as YNU; break;
-      default: { const d = f.getAll("done") as string[]; a.done = d.length ? d : undefined; }
+      default: { const d = PROCEDURES.map((p) => p.id).filter((id) => f.get("t_" + id) === "1"); a.done = d.length ? d : undefined; }
     }
   }
 
@@ -187,7 +192,7 @@ ${screen(step)}
   }
 
   function itemHtml(i: PackItem, bucket: string): string {
-    if (i.done) return `<li class="ip-item done"><label class="ip-check"><input type="checkbox" data-done="${i.p.id}" checked><span class="ip-title">${esc(i.p.title)}</span></label><p class="ip-meta">チェックを外すと「まだやっていないこと」に戻ります。</p></li>`;
+    if (i.done) return `<li class="ip-item done"><div class="ip-item-head"><span class="ip-printbox">☑</span><span class="ip-title">${esc(i.p.title)}</span>${doneToggle(i.p.id, i.p.title, true)}</div></li>`;
     const days = i.daysLeft === null ? "" : bucket === "check" ? `<span class="ip-days check">済んでいなければ早めに窓口へ</span>` : i.daysLeft < 0 ? `<span class="ip-days past">${-i.daysLeft}日過ぎています</span>` : `<span class="ip-days">あと${i.daysLeft}日</span>`;
     const office = i.officeUrl ? `<a href="${esc(i.officeUrl)}" target="_blank" rel="noopener">${esc(i.office)}</a>` : esc(i.office);
     const consult = bucket === "past" ? `<p class="ip-consult"><b>相談先：</b>${consultFor(i).map((c) => (c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)) + (c.tel ? `（<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>）` : "")).join("／")}<br><small>期限を過ぎた後に取れる方法は事情によって変わります。早めに相談してください。</small></p>` : "";
@@ -197,7 +202,7 @@ ${screen(step)}
     ].join("");
     const src = i.p.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join("<br>");
     return `<li class="ip-item${i.strong ? " strong" : ""}">
-<label class="ip-check"><input type="checkbox" data-done="${i.p.id}"${i.done ? " checked" : ""}><span class="ip-title">${esc(i.p.title)}</span></label>
+<div class="ip-item-head"><span class="ip-printbox">□</span><span class="ip-title">${esc(i.p.title)}</span>${doneToggle(i.p.id, i.p.title, false)}</div>
 <p class="ip-due">${esc(dueLabel(i))} ${days}</p>
 <p class="ip-meta">窓口：${office}</p>
 <p class="ip-action">${esc(i.p.action)}</p>
@@ -209,7 +214,7 @@ ${consult}
   function resultHtml(pk: Pack): string {
     const tl = taxLines(pk.tax);
     const todo = pk.items.filter((i) => !i.done), finished = pk.items.filter((i) => i.done);
-    const groups = `<p class="ip-progress-line">全${pk.items.length}件のうち、済んだもの <b>${finished.length}件</b>／まだのもの <b>${todo.length}件</b><br><small>済んだ手続きは、左のチェックを付けると「済んだこと」に移ります。</small></p>` +
+    const groups = `<p class="ip-progress-line">全${pk.items.length}件のうち、済んだもの <b>${finished.length}件</b>／まだのもの <b>${todo.length}件</b><br><small>済ませた手続きは「済んだ」に切り替えると、下の「済んだこと」に移ります。</small></p>` +
       `<h4 class="ip-split">まだやっていないこと（${todo.length}件）</h4>` +
       (todo.length ? groupByBucket(todo).map(([b, list]) => `<h4 class="ip-bucket ${b}">${esc(BUCKET_LABEL[b])}</h4><ul class="ip-list">${list.map((i) => itemHtml(i, b)).join("")}</ul>`).join("") : `<p>すべて済んでいます。</p>`) +
       (finished.length ? `<h4 class="ip-split done">済んだこと（${finished.length}件）</h4><ul class="ip-list">${finished.map((i) => itemHtml(i, "done")).join("")}</ul>` : "");
@@ -279,7 +284,7 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
       const id = t.dataset.done;
       if (!id) return;
       const set = new Set(a.done ?? []);
-      if (t.checked) set.add(id); else set.delete(id);
+      if (t.value === "1") set.add(id); else set.delete(id);
       a.done = set.size ? PROCEDURES.map((p) => p.id).filter((x) => set.has(x)) : undefined;
       history.replaceState(null, "", "#" + encodeAnswers(a));
       const y = window.scrollY;
