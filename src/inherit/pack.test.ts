@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { addMonths, parseYmd, ymd } from "./dates.ts";
 import { PROCEDURES, CAUTIONS } from "./master.ts";
-import { buildIcs, buildMarkdown, buildPack, buildPlainText, decodeAnswers, encodeAnswers, heirCount, taxInfo, taxLines, fmtMan } from "./pack.ts";
+import { buildCsv, buildIcs, buildMarkdown, buildPack, buildPlainText, decodeAnswers, encodeAnswers, heirCount, taxInfo, taxLines, fmtMan } from "./pack.ts";
 
 const D = (s: string) => parseYmd(s)!;
 
@@ -138,4 +138,28 @@ test("Markdown・テキスト・ICSを書き出せる", () => {
 
 test("期限の日付がひとつもなければICSは作らない", () => {
   assert.equal(buildIcs(buildPack({}, D("2026-11-23"))), null);
+});
+
+test("済ませた手続きは「済んだこと」に分け、カレンダーには入れない", () => {
+  const a = { death: "2026-11-01", done: ["houki", "shiboutodoke"] };
+  const pk = buildPack(a, D("2026-11-23"));
+  const houki = pk.items.find((i) => i.p.id === "houki")!;
+  assert.equal(houki.done, true);
+  assert.equal(houki.bucket, "done");
+  assert.match(buildMarkdown(pk), /- \[x\] 相続放棄/);
+  const ics = buildIcs(pk, new Date(Date.UTC(2026, 10, 23)))!;
+  assert.ok(!ics.includes("inherit-houki-"));
+  assert.deepEqual(decodeAnswers(encodeAnswers(a)).done, ["houki", "shiboutodoke"]);
+  assert.deepEqual(decodeAnswers("done=houki.bogus").done, ["houki"]);
+});
+
+test("表（CSV）は済・未を1行ずつ書き出し、BOMつき・式に化ける値を無害化する", () => {
+  const pk = buildPack({ death: "2026-11-01", done: ["houki"] }, D("2026-11-23"));
+  const csv = buildCsv(pk);
+  assert.ok(csv.startsWith("﻿状態,区分,手続き,期限"));
+  const lines = csv.trim().split("\r\n");
+  assert.equal(lines.length, pk.items.length + 1);
+  assert.ok(lines.some((l) => l.startsWith("済,済んだこと,相続放棄")));
+  assert.ok(lines.some((l) => l.startsWith("未,")));
+  assert.ok(!/,=/.test(csv));
 });

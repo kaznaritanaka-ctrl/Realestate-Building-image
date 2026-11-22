@@ -1,6 +1,6 @@
 // 相続手続きパックの組み立て（純粋関数）。回答から、その人に必要な手続き・注意・選択肢を並べ、書き出し用の文書を作る。
 // ここでは何も保存・送信しない。
-import { addDays, daysBetween, fmtDate, fmtDateShort, parseYmd } from "./dates.ts";
+import { addDays, daysBetween, fmtDate, fmtDateShort, parseYmd, ymd } from "./dates.ts";
 import {
   CATEGORY_ORDER, CAUTIONS, CHECKED_JA, CHOICES, CONSULT, LAND_TYPE_LABEL, OFFICE_LABEL, PROCEDURES,
   type Answers, type Caution, type Choice, type Ctx, type Due, type LandType, type Procedure, type YNU,
@@ -11,15 +11,16 @@ export const PACK_PATH = "/guide/inherit";
 
 export interface Houmu { office: string; url: string }
 
-export type Bucket = "past" | "check" | "week" | "month" | "later";
+export type Bucket = "past" | "check" | "week" | "month" | "later" | "done";
 export const BUCKET_LABEL: Record<Bucket, string> = {
   past: "期限を過ぎています（相談先へ）",
   check: "済んでいるか確認するもの",
   week: "まず今週",
   month: "今月中",
   later: "その後",
+  done: "済んだこと",
 };
-const BUCKET_ORDER: Bucket[] = ["past", "week", "month", "later", "check"];
+const BUCKET_ORDER: Bucket[] = ["past", "week", "month", "later", "check", "done"];
 
 export interface PackItem {
   p: Procedure;
@@ -29,6 +30,7 @@ export interface PackItem {
   office: string; // 窓口の表示（実名が分かれば実名）
   officeUrl?: string;
   strong: boolean;
+  done: boolean;
 }
 
 export interface TaxInfo {
@@ -50,7 +52,8 @@ export interface Pack {
 }
 
 // ---------- 回答の受け渡し（URLの # 以降。# 以降はサーバーに送られない） ----------
-const KEYS: (keyof Answers)[] = ["death", "known", "spouse", "kids", "minor", "parents", "sibs", "will", "willType", "debt", "lpref", "lcity", "ltypes", "vacant", "title", "dpref", "dcity", "bank", "pension", "insurance"];
+const KEYS: (keyof Answers)[] = ["death", "known", "spouse", "kids", "minor", "parents", "sibs", "will", "willType", "debt", "lpref", "lcity", "ltypes", "vacant", "title", "dpref", "dcity", "bank", "pension", "insurance", "done"];
+const PROC_IDS = new Set(PROCEDURES.map((p) => p.id));
 const NUM_KEYS = new Set<keyof Answers>(["kids", "parents", "sibs"]);
 const ENUMS: Partial<Record<keyof Answers, string[]>> = {
   spouse: ["y", "n"], minor: ["y", "n", "u"], will: ["y", "n", "u"], willType: ["home", "notary", "moj", "u"], debt: ["y", "n", "u"],
@@ -79,6 +82,7 @@ export function decodeAnswers(s: string): Answers {
     if (v === null || v === "") continue;
     if (k === "death" || k === "known") { if (parseYmd(v)) put[k] = v; continue; }
     if (NUM_KEYS.has(k)) { const n = Number(v); if (Number.isInteger(n) && n >= -1 && n <= 20) put[k] = n; continue; }
+    if (k === "done") { const d = v.split(".").filter((x) => PROC_IDS.has(x)); if (d.length) a.done = [...new Set(d)]; continue; }
     if (k === "ltypes") { const t = v.split(".").filter((x): x is LandType => (LAND_TYPES as string[]).includes(x)); if (t.length) a.ltypes = [...new Set(t)]; continue; }
     if (ENUMS[k]) { if (ENUMS[k]!.includes(v)) put[k] = v; continue; }
     put[k] = v.slice(0, 40); // 都道府県・市区町村の名前
@@ -171,12 +175,14 @@ export function ctxOf(a: Answers): Ctx {
 export function buildPack(a: Answers, today: Date, houmu: Houmu | null = null): Pack {
   const c = ctxOf(a);
   const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const doneSet = new Set(a.done ?? []);
   const items: PackItem[] = PROCEDURES.filter((p) => p.when(a)).map((p) => {
     const due = p.due(c);
     const daysLeft = due.date ? daysBetween(t0, due.date) : null;
     const strong = !!p.strong?.(a);
     const o = officeText(p, a, houmu);
-    return { p, due, daysLeft, strong, bucket: bucketOf(p, due, daysLeft, strong), office: o.text, officeUrl: o.url };
+    const done = doneSet.has(p.id);
+    return { p, due, daysLeft, strong, done, bucket: done ? "done" : bucketOf(p, due, daysLeft, strong), office: o.text, officeUrl: o.url };
   });
   items.sort((x, y) => {
     const b = BUCKET_ORDER.indexOf(x.bucket) - BUCKET_ORDER.indexOf(y.bucket);
@@ -230,8 +236,8 @@ export function buildMarkdown(pk: Pack): string {
   for (const [b, list] of groupByBucket(pk.items)) {
     o.push(`### ${BUCKET_LABEL[b]}`, "");
     for (const i of list) {
-      o.push(`- [ ] ${i.strong ? "**" + i.p.title + "**" : i.p.title}（${dueLabel(i)}／${i.office}）`);
-      o.push(`  - ${i.p.action}`);
+      o.push(`- [${i.done ? "x" : " "}] ${i.strong && !i.done ? "**" + i.p.title + "**" : i.p.title}（${dueLabel(i)}／${i.office}）`);
+      if (!i.done) o.push(`  - ${i.p.action}`);
       if (b === "past") o.push(`  - 相談先：${consultFor(i).map((c) => c.name + (c.tel ? " " + c.tel : "")).join("、")}`);
     }
     o.push("");
@@ -255,7 +261,7 @@ export function buildPlainText(pk: Pack): string {
   for (const [b, list] of groupByBucket(pk.items)) {
     o.push("", `■ ${BUCKET_LABEL[b]}`);
     for (const i of list) {
-      o.push(`□ ${i.p.title}（${dueLabel(i)}／${i.office}）`);
+      o.push(`${i.done ? "☑" : "□"} ${i.p.title}（${dueLabel(i)}／${i.office}）`);
       if (b === "past") o.push(`　相談先：${consultFor(i).map((c) => c.name + (c.tel ? " " + c.tel : "")).join("、")}`);
     }
   }
@@ -291,7 +297,7 @@ function fold(line: string): string {
 
 /** 期限が今日以降の手続きを、30日前・7日前の通知つきで書き出す。対象がなければ null */
 export function buildIcs(pk: Pack, now: Date = new Date()): string | null {
-  const ev = pk.items.filter((i) => i.due.date && i.daysLeft !== null && i.daysLeft >= 0);
+  const ev = pk.items.filter((i) => !i.done && i.due.date && i.daysLeft !== null && i.daysLeft >= 0);
   if (!ev.length) return null;
   const p = (n: number) => String(n).padStart(2, "0");
   const stamp = `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}T${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}Z`;
@@ -308,6 +314,23 @@ export function buildIcs(pk: Pack, now: Date = new Date()): string | null {
   }
   L.push("END:VCALENDAR");
   return L.map(fold).join("\r\n") + "\r\n";
+}
+
+/** 表計算ソフト（Excel・Googleスプレッドシート・Numbers）で開ける一覧。先頭にBOMを付けてExcelの文字化けを防ぐ */
+export function buildCsv(pk: Pack): string {
+  const cell = (v: unknown) => {
+    if (typeof v === "number") return String(v);
+    const s = String(v ?? "");
+    return /[",\r\n]/.test(s) || /^[=+\-@]/.test(s) ? `"${(/^[=+\-@]/.test(s) ? "'" : "") + s.replace(/"/g, '""')}"` : s;
+  };
+  const rows: unknown[][] = [["状態", "区分", "手続き", "期限", "期限の決まり方", "残り日数", "窓口", "まずすること", "段階", "済んだ日・メモ"]];
+  for (const [b, list] of groupByBucket(pk.items)) {
+    for (const i of list) {
+      rows.push([i.done ? "済" : "未", BUCKET_LABEL[b], i.p.title, i.due.date ? ymd(i.due.date) : "", i.due.text,
+        i.done || i.daysLeft === null ? "" : i.daysLeft, i.office, i.p.action, i.p.cat, ""]);
+    }
+  }
+  return "\uFEFF" + rows.map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
 export type { Answers, YNU };

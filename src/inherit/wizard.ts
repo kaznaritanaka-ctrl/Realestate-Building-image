@@ -1,9 +1,9 @@
 // 相続手続きパックのウィザード（ブラウザ側）。回答はこの端末の中だけで使い、どこにも送信・保存しない。
 // 見返し用に回答を URL の # 以降に入れる（# 以降はサーバーに送られない）。計測は「どの画面まで進んだか」だけを送る。
 import { fmtDateShort } from "./dates.ts";
-import { CHECKED_JA, LAND_TYPE_LABEL, type Answers, type LandType, type YNU } from "./master.ts";
+import { CHECKED_JA, CATEGORY_ORDER, LAND_TYPE_LABEL, PROCEDURES, type Answers, type LandType, type YNU } from "./master.ts";
 import {
-  BUCKET_LABEL, buildIcs, buildMarkdown, buildPack, buildPlainText, consultFor, decodeAnswers, dueLabel, encodeAnswers,
+  BUCKET_LABEL, buildCsv, buildIcs, buildMarkdown, buildPack, buildPlainText, consultFor, decodeAnswers, dueLabel, encodeAnswers,
   groupByBucket, taxLines, type Houmu, type Pack, type PackItem,
 } from "./pack.ts";
 
@@ -48,7 +48,7 @@ function countSelect(name: string, val: number | undefined, zeroLabel: string, m
   return `<select name="${name}" class="ip-select">${opts.join("")}</select>`;
 }
 
-const STEPS = ["いつ", "家族", "遺言と借金", "不動産", "亡くなった方の住所", "そのほかの財産"] as const;
+const STEPS = ["いつ", "家族", "遺言と借金", "不動産", "亡くなった方の住所", "そのほかの財産", "済ませた手続き"] as const;
 
 export function mount(root: HTMLElement) {
   let data: HoumuData | null = null;
@@ -91,9 +91,18 @@ export function mount(root: HTMLElement) {
           q("亡くなった方の最後の住所はどこですか", radios("dsame", [["y", "不動産と同じ市区町村"], ["n", "別の市区町村"]], same ? "y" : "n") +
             `<div class="ip-sub" data-show="dsame=n"><select name="dpref" class="ip-select">${prefOptions(a.dpref)}</select><select name="dcity" class="ip-select">${cityOptions(a.dpref, a.dcity)}</select></div>`, "市区町村までで十分です。");
       }
-      default: return q("預貯金や証券口座はありますか", radios("bank", YNU_OPTS, a.bank)) +
+      case 5: return q("預貯金や証券口座はありますか", radios("bank", YNU_OPTS, a.bank)) +
         q("亡くなった方は年金を受け取っていましたか", radios("pension", YNU_OPTS, a.pension)) +
         q("死亡保険金を受け取れそうな保険はありますか", radios("insurance", YNU_OPTS, a.insurance));
+      default: {
+        const done = new Set(a.done ?? []);
+        const list = PROCEDURES.filter((p) => p.when(a));
+        const groups = CATEGORY_ORDER.map((c) => {
+          const ps = list.filter((p) => p.cat === c);
+          return ps.length ? `<p class="ip-cat">${esc(c)}</p><div class="ip-done-list">${ps.map((p) => `<label class="ip-done-opt"><input type="checkbox" name="done" value="${p.id}"${done.has(p.id) ? " checked" : ""}><span>${esc(p.title)}</span></label>`).join("")}</div>` : "";
+        }).join("");
+        return q("もう済ませた手続きはありますか（いくつでも）", groups, "済んだものは「済んだこと」に分けて表示します。結果の画面でもあとからチェックを付け外しできます。迷うものはチェックせずに進んでください。");
+      }
     }
   }
 
@@ -120,7 +129,8 @@ export function mount(root: HTMLElement) {
         if (s("dsame") === "n") { a.dpref = s("dpref"); a.dcity = a.dpref ? s("dcity") : undefined; }
         else { a.dpref = a.lpref; a.dcity = a.lcity; }
         break;
-      default: a.bank = s("bank") as YNU; a.pension = s("pension") as YNU; a.insurance = s("insurance") as YNU;
+      case 5: a.bank = s("bank") as YNU; a.pension = s("pension") as YNU; a.insurance = s("insurance") as YNU; break;
+      default: { const d = f.getAll("done") as string[]; a.done = d.length ? d : undefined; }
     }
   }
 
@@ -177,6 +187,7 @@ ${screen(step)}
   }
 
   function itemHtml(i: PackItem, bucket: string): string {
+    if (i.done) return `<li class="ip-item done"><label class="ip-check"><input type="checkbox" data-done="${i.p.id}" checked><span class="ip-title">${esc(i.p.title)}</span></label><p class="ip-meta">チェックを外すと「まだやっていないこと」に戻ります。</p></li>`;
     const days = i.daysLeft === null ? "" : bucket === "check" ? `<span class="ip-days check">済んでいなければ早めに窓口へ</span>` : i.daysLeft < 0 ? `<span class="ip-days past">${-i.daysLeft}日過ぎています</span>` : `<span class="ip-days">あと${i.daysLeft}日</span>`;
     const office = i.officeUrl ? `<a href="${esc(i.officeUrl)}" target="_blank" rel="noopener">${esc(i.office)}</a>` : esc(i.office);
     const consult = bucket === "past" ? `<p class="ip-consult"><b>相談先：</b>${consultFor(i).map((c) => (c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)) + (c.tel ? `（<a href="tel:${esc(c.tel)}">${esc(c.tel)}</a>）` : "")).join("／")}<br><small>期限を過ぎた後に取れる方法は事情によって変わります。早めに相談してください。</small></p>` : "";
@@ -186,7 +197,7 @@ ${screen(step)}
     ].join("");
     const src = i.p.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join("<br>");
     return `<li class="ip-item${i.strong ? " strong" : ""}">
-<label class="ip-check"><input type="checkbox"><span class="ip-title">${esc(i.p.title)}</span></label>
+<label class="ip-check"><input type="checkbox" data-done="${i.p.id}"${i.done ? " checked" : ""}><span class="ip-title">${esc(i.p.title)}</span></label>
 <p class="ip-due">${esc(dueLabel(i))} ${days}</p>
 <p class="ip-meta">窓口：${office}</p>
 <p class="ip-action">${esc(i.p.action)}</p>
@@ -197,7 +208,11 @@ ${consult}
 
   function resultHtml(pk: Pack): string {
     const tl = taxLines(pk.tax);
-    const groups = groupByBucket(pk.items).map(([b, list]) => `<h4 class="ip-bucket ${b}">${esc(BUCKET_LABEL[b])}</h4><ul class="ip-list">${list.map((i) => itemHtml(i, b)).join("")}</ul>`).join("");
+    const todo = pk.items.filter((i) => !i.done), finished = pk.items.filter((i) => i.done);
+    const groups = `<p class="ip-progress-line">全${pk.items.length}件のうち、済んだもの <b>${finished.length}件</b>／まだのもの <b>${todo.length}件</b><br><small>済んだ手続きは、左のチェックを付けると「済んだこと」に移ります。</small></p>` +
+      `<h4 class="ip-split">まだやっていないこと（${todo.length}件）</h4>` +
+      (todo.length ? groupByBucket(todo).map(([b, list]) => `<h4 class="ip-bucket ${b}">${esc(BUCKET_LABEL[b])}</h4><ul class="ip-list">${list.map((i) => itemHtml(i, b)).join("")}</ul>`).join("") : `<p>すべて済んでいます。</p>`) +
+      (finished.length ? `<h4 class="ip-split done">済んだこと（${finished.length}件）</h4><ul class="ip-list">${finished.map((i) => itemHtml(i, "done")).join("")}</ul>` : "");
     const choice = (g: "仕方" | "土地") => pk.choices.filter((c) => c.group === g).map((c) => `<div class="ip-card"><h5>${esc(c.title)}</h5><p><b>向いているとき：</b>${esc(c.fit)}</p><p><b>次の一手：</b>${esc(c.next)}</p><p><b>注意：</b>${esc(c.care)}</p>${c.link ? `<p><a href="${esc(c.link.href)}"${c.link.href.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${esc(c.link.label)}</a></p>` : ""}</div>`).join("");
     const head = [pk.death ? `亡くなった日：${fmtDateShort(pk.death)}` : "", pk.houmu ? `管轄の法務局：${esc(pk.houmu.office)}` : ""].filter(Boolean).join("<br>");
     return `<div class="ip-result">
@@ -211,9 +226,9 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
 <section class="ip-block ip-choices-block"><h3>2. あなたに選べること</h3><h4>相続の仕方</h4><div class="ip-cards">${choice("仕方")}</div><h4>土地・家をどうするか</h4><div class="ip-cards">${choice("土地")}</div><p class="small">売却・解体・管理・活用は、1社で決めず複数社の見積りと説明を比べてから決めるのが安全です。</p></section>
 <section class="ip-block"><h3>3. 大きな失敗をしないために</h3><ul class="ip-cautions">${pk.cautions.map((k) => `<li class="${k.isStrong ? "strong" : ""}"><b>${esc(k.title)}</b><br>${esc(k.why)}</li>`).join("")}</ul></section>
 <section class="ip-block no-print ip-exports"><h3>持ち出す・見返す</h3>
-<div class="exports"><button type="button" data-x="print">印刷する（手順書）</button><button type="button" data-x="ics">期限をカレンダーに追加（.ics）</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownをコピー</button><button type="button" data-x="txt">メモ用テキストをコピー</button></div>
+<div class="exports"><button type="button" data-x="print">印刷する（手順書）</button><button type="button" data-x="csv">表（シート）で保存（Excel・スプレッドシート）</button><button type="button" data-x="ics">まだの期限をカレンダーに追加（.ics）</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownをコピー</button><button type="button" data-x="txt">メモ用テキストをコピー</button></div>
 <p class="small ip-ics-note"></p>
-<p class="small">カレンダーには、今日より後の期限を、1か月前と1週間前の通知つきで書き出します。<br>このページのURLをブックマークすると、同じパックをあとから開き直せます。<br>回答はURLの「#」より後ろに入っていて、サーバーには送られません。共有するときは回答の内容が見える点にご注意ください。</p>
+<p class="small">表（シート）は、済んだもの・まだのものを1行ずつ並べたCSVファイルです。ExcelやGoogleスプレッドシートで開くと、済んだ日やメモを書き込んで管理できます。<br>カレンダーには、まだ済んでいない手続きのうち今日より後の期限を、1か月前と1週間前の通知つきで書き出します。<br>このページのURLをブックマークすると、同じパックをあとから開き直せます。<br>回答はURLの「#」より後ろに入っていて、サーバーには送られません。共有するときは回答の内容が見える点にご注意ください。</p>
 </section>
 <p class="small">手続きの内容は${CHECKED_JA}に公式の案内で確認しました。<br>一般的な手続きの目安で、個別の事情への助言ではありません。期限が土日祝日にあたる場合の扱いは、手続きごとに窓口へご確認ください。</p>
 </div>`;
@@ -239,7 +254,7 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
   }
 
-  function renderResult() {
+  function renderResult(first = true) {
     const pk = buildPack(a, today(), houmu());
     root.innerHTML = resultHtml(pk);
     root.querySelector(".ip-edit")!.addEventListener("click", () => { step = 0; renderStep(); scrollTop(); });
@@ -254,12 +269,25 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
       track("pack_export", { via: x });
       if (x === "print") { document.body.classList.add("print-pack"); window.print(); setTimeout(() => document.body.classList.remove("print-pack"), 500); }
       else if (x === "ics" && ics) download("相続の手続きの期限.ics", ics, "text/calendar");
+      else if (x === "csv") download("相続の手続き一覧.csv", buildCsv(pk), "text/csv");
       else if (x === "md") download("相続の手続きパック.md", buildMarkdown(pk), "text/markdown");
       else if (x === "mdcopy") copy(buildMarkdown(pk), b);
       else if (x === "txt") copy(buildPlainText(pk), b);
     });
+    root.querySelector(".ip-block")!.addEventListener("change", (e) => {
+      const t = e.target as HTMLInputElement;
+      const id = t.dataset.done;
+      if (!id) return;
+      const set = new Set(a.done ?? []);
+      if (t.checked) set.add(id); else set.delete(id);
+      a.done = set.size ? PROCEDURES.map((p) => p.id).filter((x) => set.has(x)) : undefined;
+      history.replaceState(null, "", "#" + encodeAnswers(a));
+      const y = window.scrollY;
+      renderResult(false);
+      window.scrollTo(0, y);
+    });
     const cb = root.querySelector(".ip-choices-block");
-    if (cb && "IntersectionObserver" in window) {
+    if (first && cb && "IntersectionObserver" in window) {
       const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { track("decision_view"); io.disconnect(); } });
       io.observe(cb);
     }
@@ -267,7 +295,7 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
 
   void dataReady.then(() => {
     const hash = location.hash.slice(1);
-    if (hash && /(^|&)(death|spouse|kids|will|debt|lpref)=/.test(hash)) {
+    if (hash && /(^|&)(death|spouse|kids|will|debt|lpref|done)=/.test(hash)) {
       a = decodeAnswers(hash);
       track("restored", { source: "inherit" });
       renderResult();
