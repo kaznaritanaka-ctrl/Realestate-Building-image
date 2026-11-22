@@ -227,7 +227,6 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .pack-root .ip-item.strong { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
 .pack-root .ip-check { display: flex; gap: 10px; align-items: flex-start; font-weight: 700; line-height: 1.5; cursor: pointer; }
 .pack-root .ip-check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--accent); }
-.pack-root .ip-check input:checked + .ip-title { text-decoration: line-through; color: var(--ink-soft); }
 .pack-root .ip-item p { margin: .3em 0 0 30px; line-height: 1.6; font-size: .93rem; }
 .pack-root .ip-due { font-weight: 600; }
 .pack-root .ip-days { display: inline-block; font-size: .8rem; padding: 1px 8px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); margin-left: .3em; }
@@ -252,6 +251,16 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .pack-root .exports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 1em; }
 .pack-root .exports button { min-height: 44px; padding: 10px 14px; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: var(--r-md); font-weight: 600; cursor: pointer; }
 .pack-root .exports button:disabled { opacity: .45; cursor: default; }
+.pack-root .ip-cat { font-weight: 700; font-size: .88rem; color: var(--ink-soft); margin: .9em 0 .3em; }
+.pack-root .ip-done-list { display: flex; flex-direction: column; gap: 6px; }
+.pack-root .ip-done-opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; background: #fff; line-height: 1.5; cursor: pointer; min-height: 44px; box-sizing: border-box; }
+.pack-root .ip-done-opt input { width: 20px; height: 20px; margin-top: 1px; flex: none; accent-color: var(--accent); }
+.pack-root .ip-done-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.pack-root .ip-progress-line { background: var(--accent-soft); border-radius: var(--r-md); padding: 8px 12px; line-height: 1.7; }
+.pack-root .ip-split { margin: 1.4em 0 .2em; font-size: 1.05rem; border-bottom: 2px solid var(--accent); padding-bottom: .2em; }
+.pack-root .ip-split.done { border-bottom-color: var(--line); color: var(--ink-soft); }
+.pack-root .ip-item.done { background: #f6f7f7; }
+.pack-root .ip-item.done .ip-title { text-decoration: line-through; color: var(--ink-soft); }
 .guide .three-q { counter-reset: q; list-style: none; padding: 0; }
 .guide .three-q li { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 14px; margin: 8px 0; background: var(--card); line-height: 1.7; }
 .guide .three-q b { display: block; }

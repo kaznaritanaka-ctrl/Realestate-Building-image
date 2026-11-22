@@ -31,6 +31,7 @@ export interface Answers {
   bank?: YNU; // 預貯金・証券口座
   pension?: YNU; // 年金を受け取っていたか
   insurance?: YNU; // 死亡保険金を受け取れそうか
+  done?: string[]; // 済ませた手続きの id
 }
 
 export type LandType = "home" | "land" | "farm" | "forest";

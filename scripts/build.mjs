@@ -45,9 +45,14 @@ import { readFileSync, writeFileSync } from "node:fs";
     const city = m[1].slice(pref.length);
     (grouped[pref] ??= {})[city] = { office: m[2], url: m[3] };
   }
+  // 市区町村は読みの50音順に並べる（読みは総務省「全国地方公共団体コード」による。郡名つきは町村名の読み）
+  const KANA = JSON.parse(readFileSync("src/city-kana.json", "utf8"));
+  const missing = [];
   for (const pref of Object.keys(grouped)) {
-    grouped[pref] = Object.fromEntries(Object.entries(grouped[pref]).sort(([a], [b]) => a.localeCompare(b, "ja")));
+    const yomi = (c) => KANA[pref]?.[c] ?? (missing.push(pref + c), c);
+    grouped[pref] = Object.fromEntries(Object.entries(grouped[pref]).sort(([a], [b]) => yomi(a).localeCompare(yomi(b), "ja") || a.localeCompare(b, "ja")));
   }
+  if (missing.length) throw new Error(`市区町村の読みがありません（src/city-kana.json に追加してください）: ${[...new Set(missing)].join("、")}`);
   writeFileSync("site/assets/houmukyoku.json", JSON.stringify(grouped));
   console.log("houmukyoku.json:", Object.values(grouped).reduce((n, g) => n + Object.keys(g).length, 0), "件");
 }
@@ -136,7 +141,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 <p>相続登記（名義変更）の申請先は、土地の所在地を管轄する法務局です。<br>${pref}の${rows.length}市区町村について、管轄の法務局をまとめました。<br>2024年4月から相続登記は義務化され、期限は相続を知った日から3年以内です（それより前に始まった相続は2027年3月31日まで）。<br>手続き全体の流れは<a href="/guide/inherit">相続ガイド</a>にまとめています。</p>
 
 <h2 id="tool">あなたの相続の手続きを確認する</h2>
-<p>6つの画面で質問に答えると、${pref}の管轄法務局を含めて、あなたに必要な手続きが期限の近い順に並びます。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
+<p>7つの画面で質問に答えると、${pref}の管轄法務局を含めて、あなたに必要な手続きが期限の近い順に並びます。<br>済ませた手続きにチェックを付けると、まだの手続きと分けて一覧にでき、表（シート）やカレンダーに書き出せます。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
 <div id="inherit-pack" class="pack-root" data-pref="${pref}"><p class="small">読み込み中です。表示されない場合は、ブラウザのJavaScriptを有効にしてください。</p></div>
 
 <h2>${pref}の市区町村と管轄法務局</h2>
