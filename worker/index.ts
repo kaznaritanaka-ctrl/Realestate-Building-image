@@ -37,6 +37,7 @@ function rateLimited(): Response {
 const EVENT_NAMES = new Set([
   "lp_view", "wizard_view", "step_enter", "located", "shape_done", "road_set", "zone_resolved",
   "run", "plan_tab", "sample_used", "ad_impression", "restart", "context", "rotate", "site_info", "style", "situation", "edge_width", "step_jump", "save_result", "save_jump", "restored", "view", "shape", "guide_view", "parcel_pick",
+  "wizard_start", "wizard_step", "wizard_complete", "pack_export", "decision_view",
 ]);
 const PROP_KEYS = new Set(["area", "deg", "step", "via", "areaBucket", "edges", "roads", "source", "zone", "focus", "stage", "plan", "size", "use", "ref", "mobile", "style", "situation", "w", "h", "dir", "shape", "page"]);
 

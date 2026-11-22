@@ -23,7 +23,7 @@
 "headline": "相続した土地・実家の進め方を、手続きと選択肢から整理する",
 "description": "実家や土地を相続したら、まず何をするか。名義の確認から相続登記の手続きの流れ、住む・活用する・手放すの選択肢、相続した土地に何が建つかを3Dで確認する方法までを整理します。",
 "datePublished": "2026-11-08",
-"dateModified": "2026-11-20",
+"dateModified": "2026-11-23",
 "inLanguage": "ja",
 "author": {
 "@type": "Person",
@@ -45,39 +45,25 @@
 <main class="wrap doc guide">
 <p class="pr-label">【PR】本ページはプロモーション（広告）を含みます</p>
 <h1>相続した土地・実家の進め方を、手続きと選択肢から整理する</h1>
-<p class="lead">実家や土地を相続したら、やることは大きく4つです。<br>期限のあるものから順に並べました。</p>
-
-<h2>やることは大きく4つです</h2>
-<ol class="actions">
-<li><b>名義を確認する</b>現在の名義は、法務局の登記記録で確認できます。<br>登記情報は、地図から取得できる外部サービス（<a href="https://kokonotoukibo.jp/" target="_blank" rel="noopener">ここの登記簿</a>）でも取れます。</li>
-<li><b>相続登記をする</b>申請先は、土地を管轄する法務局です。<br>2024年4月から義務化され、期限は相続を知った日から3年以内（それより前に始まった相続は2027年3月31日まで）。<br>詳しくは法務省の<a href="https://www.moj.go.jp/MINJI/minji05_00599.html" target="_blank" rel="noopener">公式案内</a>にまとまっています。<br>全国の土地は、<a href="#tool">下の欄</a>で市区町村から管轄を調べられます。</li>
-<li><b>相続税の申告が要るか確認する</b>申告が必要な場合、期限は相続の開始を知った日の翌日から10か月以内です。<br>目安として、遺産の総額が基礎控除（3,000万円＋600万円×法定相続人の数）以下なら、申告は不要です。</li>
-<li><b>土地をどうするか決める</b>住む・活用する・手放すの方向は、土地の条件で変わります。<br>まず条件の確認から始めるのが順番です（次の項目へ）。</li>
+<p class="lead">実家や土地を相続したときに知っておきたいのは、次の3つです。<br>このページでは、3つの答えを手続きパックとしてまとめて受け取れます。</p>
+<ol class="three-q">
+<li><b>1. 自分が何をしないといけないか</b>相続放棄（3か月）、相続税の申告（10か月）、相続登記（3年）など、期限のある手続きです。</li>
+<li><b>2. 自分にどんな選択肢があるか</b>そのまま相続するか放棄するか、土地や家を住む・売る・貸す・手放すのどれにするか、です。</li>
+<li><b>3. 大きな失敗をしないために何に気を付けるか</b>期限を過ぎること、相続人全員の合意なしに不動産を処分すること、急かされての契約などです。</li>
 </ol>
 
+<h2 id="tool">あなたの相続の手続きパックを作る</h2>
+<p>6つの画面で質問に答えると、あなたに必要な手続きだけが期限の近い順に並びます。<br>管轄の法務局は全国の市区町村から調べます。<br>印刷して窓口に持って行ったり、期限をカレンダーに入れたりできます。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
+<div id="inherit-pack" class="pack-root"><p class="small">読み込み中です。表示されない場合は、ブラウザのJavaScriptを有効にしてください。</p></div>
+<p class="small">手続きごとの説明は<a href="/guide/inherit/tetsuzuki">相続の手続き一覧</a>にもまとめています。</p>
 
-<h2 id="tool">あなたの土地の手続きを確認する</h2>
-<p>全国の土地は、市区町村を選ぶと管轄の法務局が分かります。<br>相続を知った日を入れると、期限も計算します。<br>入力した内容はこの端末の中だけで処理され、どこにも送信されません。</p>
-<div class="tool">
-<label for="tool-pref">土地のある都道府県</label>
-<select id="tool-pref"><option value="">選択してください</option></select>
-<label for="tool-city">市区町村</label>
-<select id="tool-city"><option value="">市区町村を選んでください</option></select>
-<label for="tool-chiban">地番（任意）</label>
-<input id="tool-chiban" type="text" placeholder="例：中島町123番地" autocomplete="off">
-<label for="tool-date">相続を知った日（任意）</label>
-<input id="tool-date" type="date">
-<p id="tool-office" class="office-line"></p>
-<table class="schedule"><thead><tr><th>手続き</th><th>期限</th><th>窓口</th></tr></thead><tbody id="tool-schedule"></tbody></table>
-<div class="exports">
-<button type="button" id="tool-md-copy">チェックリストをMarkdownでコピー</button>
-<button type="button" id="tool-txt-copy">メモ用テキストをコピー</button>
-<button type="button" id="tool-md-dl">Markdownファイルで保存</button>
-<button type="button" id="tool-ics">期限をカレンダーに追加（.ics）</button>
-</div>
-<p class="small" id="tool-ics-note"></p>
-<p class="small">MarkdownはNotionなどに貼るとチェックリストとして使えます。<br>メモ用テキストはiPhoneのメモに貼って、メモ側のチェックリスト書式を当てると消し込める形になります。<br>カレンダーは期限の1か月前と1週間前に知らせる設定で書き出します。</p>
-</div>
+<h2>期限のある主な手続き</h2>
+<ol class="actions">
+<li><b>相続放棄をするか決める（3か月）</b>借金を引き継ぎたくない場合は、相続を知った時から3か月以内に家庭裁判所へ申し立てます。<br>詳しくは<a href="/guide/inherit/tetsuzuki/houki">相続放棄・限定承認</a>。</li>
+<li><b>相続税の申告が要るか確認する（10か月）</b>遺産の合計が基礎控除（3,000万円＋600万円×法定相続人の数）以下なら、申告は要りません。<br>詳しくは<a href="/guide/inherit/tetsuzuki/souzokuzei">相続税の申告</a>。</li>
+<li><b>相続登記をする（3年）</b>申請先は、土地を管轄する法務局です。<br>2024年4月から義務になり、期限は相続で取得したことを知った日から3年以内です（それより前に知った相続は2027年3月31日まで）。<br>現在の名義は登記記録で確認でき、地図から取得できる外部サービス（<a href="https://kokonotoukibo.jp/" target="_blank" rel="noopener">ここの登記簿</a>）でも取れます。<br>詳しくは<a href="/guide/inherit/tetsuzuki/souzokutouki">相続登記</a>。</li>
+<li><b>土地をどうするか決める</b>住む・活用する・手放すの方向は、土地の条件で変わります。<br>まず条件の確認から始めるのが順番です（次の項目へ）。</li>
+</ol>
 
 <h2>都道府県ごとの管轄法務局</h2>
 <p>県ごとに、市区町村と管轄の法務局の一覧を用意しています。<br>土地のある県のページを開くと、その県の表と手続きの確認がまとめてできます。</p>
@@ -103,7 +89,7 @@
 </ul>
 
 <h2>手続きの進み方（補足）</h2>
-<p>4つの間には、相続人を確定し、分け方を話し合う（遺産分割）手順が入ります。<br>必要に応じて、合意の内容は協議書にまとめます。</p>
+<p>上の手続きの間には、相続人を確定し、分け方を話し合う（遺産分割）手順が入ります。<br>合意の内容は遺産分割協議書にまとめます。</p>
 <p>書類集めの窓口は手続きごとに分かれます。<br>戸籍の証明書は本籍地の市区町村役場、固定資産の評価証明は土地のある市区町村の窓口、相続登記の申請先は管轄の法務局です。</p>
 <p>手続きの内容は家族構成や財産の内容で変わります。<br>個別の判断は、司法書士や税理士などの専門家への相談が前提です。</p>
 
@@ -128,7 +114,7 @@
 <li>「土地の未来図」の3Dと規模は参考のイメージと概算で、建築できることや売却価格を保証するものではありません。</li>
 <li>本ページには広告（アフィリエイトリンク）が含まれます。<br>詳しくは<a href="/ad-policy">広告掲載方針</a>をご覧ください。</li>
 </ul>
-<p class="updated">掲載日：2026年11月8日／更新日：2026年11月20日</p>
+<p class="updated">掲載日：2026年11月8日／更新日：2026年11月23日</p>
 </main>
 <footer class="site">
 <div class="wrap">
@@ -137,6 +123,6 @@
 </div>
 </footer>
 <script src="/assets/guide.js" defer></script>
-<script src="/assets/inherit-tool.js" defer></script>
+<script src="/assets/inherit-pack.js" defer></script>
 </body>
 </html>
