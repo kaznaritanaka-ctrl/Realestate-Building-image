@@ -4,8 +4,17 @@ import { fmtDateShort } from "./dates.ts";
 import { CHECKED_JA, CATEGORY_ORDER, LAND_TYPE_LABEL, PROCEDURES, type Answers, type LandType, type YNU } from "./master.ts";
 import {
   BUCKET_LABEL, buildCsv, buildIcs, buildMarkdown, buildPack, buildPlainText, consultFor, decodeAnswers, dueLabel, encodeAnswers,
-  groupByBucket, taxLines, type Houmu, type Pack, type PackItem,
+  groupByBucket, taxLines, type Contact, type Contacts, type Houmu, type Pack, type PackItem,
 } from "./pack.ts";
+import { buildPdfHtml } from "./pdf.ts";
+
+/** site/assets/offices.json（scripts/offices/build.py が作る） */
+interface OfficeData {
+  tax: [string, string, string][];
+  court: [string, string, string][];
+  city?: [string, string, string][];
+  map: Record<string, Record<string, [number[], number[], number, number?]>>;
+}
 
 type HoumuData = Record<string, Record<string, Houmu>>;
 
@@ -63,6 +72,23 @@ export function mount(root: HTMLElement) {
   const preset = root.dataset.pref || "";
   const today = () => new Date();
 
+  let offices: OfficeData | null = null;
+  const officesReady = fetch("/assets/offices.json").then((r) => r.json()).then((j: OfficeData) => { offices = j; }).catch(() => { offices = null; });
+  function contacts(): Contacts {
+    const o = offices;
+    if (!o) return {};
+    const toC = (t: [string, string, string], part: boolean): Contact => ({ name: t[0], tel: t[1] || undefined, url: t[2] || undefined, part });
+    const out: Contacts = {};
+    const d = a.dpref && a.dcity ? o.map[a.dpref]?.[a.dcity] : undefined;
+    if (d) {
+      out.tax = d[0].map((i) => toC(o.tax[i], !!(d[2] & 1)));
+      out.court = d[1].map((i) => toC(o.court[i], !!(d[2] & 2)));
+      if (o.city && d[3] !== undefined) out.city = toC(o.city[d[3]], false);
+    }
+    const l = a.lpref && a.lcity ? o.map[a.lpref]?.[a.lcity] : undefined;
+    if (l && o.city && l[3] !== undefined) out.landCity = toC(o.city[l[3]], false);
+    return out;
+  }
   const dataReady = fetch("/assets/houmukyoku.json").then((r) => r.json()).then((j: HoumuData) => { data = j; }).catch(() => { data = null; });
 
   const prefOptions = (sel?: string) => [`<option value="">都道府県を選んでください</option>`, ...Object.keys(data ?? {}).map((p) => `<option${p === sel ? " selected" : ""}>${esc(p)}</option>`)].join("");
@@ -226,7 +252,7 @@ ${consult}
 ${head ? `<p class="ip-head">${head}</p>` : ""}
 ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、期限の日付は出していません。</p>`}
 <section class="no-print ip-exports ip-exports-top"><h4>保存・印刷する</h4>
-<div class="exports"><button type="button" data-x="print">印刷（手順書）</button><button type="button" data-x="csv">表で保存（Excel）</button><button type="button" data-x="ics">カレンダーに追加</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownコピー</button><button type="button" data-x="txt">メモ用にコピー</button></div>
+<div class="exports"><button type="button" data-x="pdf">PDF（3枚・横）</button><button type="button" data-x="csv">表で保存（Excel）</button><button type="button" data-x="ics">カレンダーに追加</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownコピー</button><button type="button" data-x="txt">メモ用にコピー</button></div>
 <p class="small ip-ics-note"></p>
 <details class="small ip-exports-help"><summary>それぞれの使い方</summary><p>表（シート）は、済んだもの・まだのものを1行ずつ並べたCSVファイルです。ExcelやGoogleスプレッドシートで開くと、済んだ日やメモを書き込んで管理できます。<br>カレンダーには、まだ済んでいない手続きのうち今日より後の期限を、1か月前と1週間前の通知つきで書き出します。<br>このページのURLをブックマークすると、同じパックをあとから開き直せます。<br>回答はURLの「#」より後ろに入っていて、サーバーには送られません。共有するときは回答の内容が見える点にご注意ください。</p></details>
 </section>
@@ -259,9 +285,21 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
   }
 
+  /** A4横で印刷する（「PDFに保存」を選ぶとPDFになる）。用紙の向きはこの印刷のときだけ変える */
+  function printPdf() {
+    const st = document.createElement("style");
+    st.textContent = "@page { size: A4 landscape; margin: 10mm; }";
+    document.head.appendChild(st);
+    document.body.classList.add("print-pdf");
+    const done = () => { st.remove(); document.body.classList.remove("print-pdf"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    window.print();
+    setTimeout(() => { if (!matchMedia("print").matches) done(); }, 1000);
+  }
+
   function renderResult(first = true) {
-    const pk = buildPack(a, today(), houmu());
-    root.innerHTML = resultHtml(pk);
+    const pk = buildPack(a, today(), houmu(), contacts());
+    root.innerHTML = resultHtml(pk) + buildPdfHtml(pk);
     root.querySelector(".ip-edit")!.addEventListener("click", () => { step = 0; renderStep(); scrollTop(); });
     root.querySelector(".ip-reset")!.addEventListener("click", () => { a = preset ? { lpref: preset } : {}; step = 0; history.replaceState(null, "", location.pathname); renderStep(); scrollTop(); });
     const ics = buildIcs(pk);
@@ -272,7 +310,7 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
       if (!b) return;
       const x = b.dataset.x!;
       track("pack_export", { via: x });
-      if (x === "print") { document.body.classList.add("print-pack"); window.print(); setTimeout(() => document.body.classList.remove("print-pack"), 500); }
+      if (x === "pdf") printPdf();
       else if (x === "ics" && ics) download("相続の手続きの期限.ics", ics, "text/calendar");
       else if (x === "csv") download("相続の手続き一覧.csv", buildCsv(pk), "text/csv");
       else if (x === "md") download("相続の手続きパック.md", buildMarkdown(pk), "text/markdown");
@@ -298,7 +336,7 @@ ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、
     }
   }
 
-  void dataReady.then(() => {
+  void Promise.all([dataReady, officesReady]).then(() => {
     const hash = location.hash.slice(1);
     if (hash && /(^|&)(death|spouse|kids|will|debt|lpref|done)=/.test(hash)) {
       a = decodeAnswers(hash);

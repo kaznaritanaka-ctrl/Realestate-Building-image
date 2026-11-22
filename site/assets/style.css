@@ -280,7 +280,43 @@ h1, h2, .brand { font-family: var(--font-head); font-weight: 700; font-feature-s
 .guide .three-q li { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 14px; margin: 8px 0; background: var(--card); line-height: 1.7; }
 .guide .three-q b { display: block; }
 .guide .tetsuzuki-list li { margin: .5em 0; line-height: 1.6; }
+.pack-root .ip-pdf { display: none; }
 @media print {
+  body.print-pdf header.site, body.print-pdf footer.site, body.print-pdf main > :not(.pack-root), body.print-pdf .pack-root > :not(.ip-pdf) { display: none !important; }
+  body.print-pdf .pack-root { border: 0; padding: 0; margin: 0; background: none; }
+  body.print-pdf .ip-pdf { display: block; font-size: 9pt; line-height: 1.45; color: #000; }
+  .ip-pdf .pdf-page { break-after: page; }
+  .ip-pdf .pdf-page:last-child { break-after: auto; }
+  .ip-pdf h1 { font-size: 15pt; margin: 0 0 2mm; }
+  .ip-pdf h2 { font-size: 11pt; margin: 4mm 0 1.5mm; border-left: 3pt solid #23785f; padding-left: 2mm; }
+  .ip-pdf h3 { font-size: 9.5pt; margin: 2mm 0 1mm; }
+  .ip-pdf .pdf-head, .ip-pdf .pdf-sum { margin: 0 0 1mm; }
+  .ip-pdf table { width: 100%; border-collapse: collapse; }
+  .ip-pdf th, .ip-pdf td { border: 0.5pt solid #999; padding: 1.2mm 1.6mm; text-align: left; vertical-align: top; }
+  .ip-pdf thead th { background: #eef4f1; }
+  .ip-pdf .pdf-contacts tbody th { white-space: nowrap; background: #f6f8f7; }
+  .ip-pdf .pdf-tel { white-space: nowrap; font-weight: 700; font-size: 10pt; }
+  .ip-pdf .pdf-muted { font-weight: 400; color: #666; font-size: 8pt; }
+  .ip-pdf small { font-size: 7.5pt; color: #444; }
+  .ip-pdf a { color: #000; }
+  .ip-pdf .pdf-tax { border: 0.5pt solid #999; padding: 2mm; margin: 0; }
+  .ip-pdf .pdf-todo { table-layout: fixed; }
+  .ip-pdf .pdf-todo td, .ip-pdf .pdf-todo th { padding: 0.6mm 1.2mm; font-size: 7.8pt; line-height: 1.3; }
+  .ip-pdf .pdf-todo tr { break-inside: avoid; }
+  .ip-pdf .pdf-box { width: 5mm; font-size: 11pt; text-align: center; }
+  .ip-pdf .pdf-date { width: 34mm; }
+  .ip-pdf .pdf-left { white-space: nowrap; width: 16mm; }
+  .ip-pdf .pdf-past { color: #b3261e; font-weight: 700; }
+  .ip-pdf .pdf-row-past td { background: #fdf1f0; }
+  .ip-pdf .pdf-done td { color: #777; }
+  .ip-pdf .pdf-cols { display: grid; grid-template-columns: 2fr 1fr; gap: 5mm; }
+  .ip-pdf .pdf-p3 { font-size: 7.3pt; line-height: 1.32; }
+  .ip-pdf .pdf-p3 h2 { margin-top: 0; }
+  .ip-pdf .pdf-p3 > div:first-child .pdf-list { column-count: 2; column-gap: 5mm; }
+  .ip-pdf .pdf-list { margin: 0; padding-left: 4mm; }
+  .ip-pdf .pdf-list li { margin: 0 0 1.4mm; break-inside: avoid; }
+  .ip-pdf .pdf-strong b { color: #b3261e; }
+  .ip-pdf .pdf-foot { font-size: 7pt; color: #555; margin-top: 3mm; }
   body.print-pack header.site, body.print-pack footer.site, body.print-pack main > :not(.pack-root) { display: none !important; }
   body.print-pack .pack-root { border: 0; padding: 0; margin: 0; }
   .pack-root .no-print, .pack-root .ip-more summary { display: none !important; }

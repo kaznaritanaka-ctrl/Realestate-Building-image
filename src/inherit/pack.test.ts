@@ -163,3 +163,19 @@ test("表（CSV）は済・未を1行ずつ書き出し、BOMつき・式に化�
   assert.ok(lines.some((l) => l.startsWith("未,")));
   assert.ok(!/,=/.test(csv));
 });
+
+test("PDF用HTML：頭書きに窓口と電話、やる事リストは期限順で済みは後ろ", async () => {
+  const { buildPdfHtml, contactRows } = await import("./pdf.ts");
+  const pk = buildPack({ death: "2026-08-01", dpref: "大阪府", dcity: "大阪市北区", lpref: "兵庫県", lcity: "明石市", done: ["shiboutodoke"] }, D("2026-11-23"),
+    { office: "神戸地方法務局 明石支局", url: "https://example.jp" },
+    { tax: [{ name: "大淀税務署", tel: "06-6372-7221", part: true }, { name: "北税務署", tel: "06-6313-3371", part: true }], court: [{ name: "大阪家庭裁判所", tel: "06-6943-5745" }] });
+  const rows = contactRows(pk);
+  assert.equal(rows[0].kind, "法務局");
+  assert.ok(rows.some((r) => r.name === "大淀税務署" && r.note));
+  assert.ok(rows.some((r) => r.tel === "06-6943-5745"));
+  const html = buildPdfHtml(pk);
+  assert.equal((html.match(/class="pdf-page"/g) || []).length, 3);
+  const todo = html.slice(html.indexOf("pdf-todo"));
+  assert.ok(todo.indexOf("死亡届") > todo.indexOf("相続登記"), "済みは後ろ");
+  assert.match(html, /4,800万円|基礎控除/);
+});
