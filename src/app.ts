@@ -132,7 +132,7 @@ map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-ri
 
 // 筆レイヤー（既定で有効。?parcels=0 のときだけ無効になり、その場合はプロトコル登録・ソース追加・R2 への取得を一切行わない）
 const PARCELS_ON = new URLSearchParams(location.search).get("parcels") !== "0"; // 既定ON（?parcels=0 で無効化）
-const PARCEL_URL = "pmtiles://https://tiles.realestate.ai-investment-research.net/osaka-hyogo.pmtiles";
+const PARCEL_URL = "pmtiles://https://tiles.realestate.ai-investment-research.net/kinki.pmtiles";
 const PARCEL_LAYERS = ["parcel-fill", "parcel-line"];
 let parcelsVisible = true;
 let parcelsFailed = false;
