@@ -225,16 +225,16 @@ ${consult}
 <h3>あなたの相続の手続きパック</h3>
 ${head ? `<p class="ip-head">${head}</p>` : ""}
 ${pk.death ? "" : `<p class="ip-warn">亡くなった日が未入力のため、期限の日付は出していません。</p>`}
+<section class="no-print ip-exports ip-exports-top"><h4>保存・印刷する</h4>
+<div class="exports"><button type="button" data-x="print">印刷（手順書）</button><button type="button" data-x="csv">表で保存（Excel）</button><button type="button" data-x="ics">カレンダーに追加</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownコピー</button><button type="button" data-x="txt">メモ用にコピー</button></div>
+<p class="small ip-ics-note"></p>
+<details class="small ip-exports-help"><summary>それぞれの使い方</summary><p>表（シート）は、済んだもの・まだのものを1行ずつ並べたCSVファイルです。ExcelやGoogleスプレッドシートで開くと、済んだ日やメモを書き込んで管理できます。<br>カレンダーには、まだ済んでいない手続きのうち今日より後の期限を、1か月前と1週間前の通知つきで書き出します。<br>このページのURLをブックマークすると、同じパックをあとから開き直せます。<br>回答はURLの「#」より後ろに入っていて、サーバーには送られません。共有するときは回答の内容が見える点にご注意ください。</p></details>
+</section>
 <section class="ip-block"><h3>1. あなたがしなければならないこと</h3>${groups}
 <div class="ip-tax"><h4>相続税の申告が要るかの目安</h4>${tl.head.map((l) => `<p>${esc(l)}</p>`).join("")}<p class="small">遺産の合計を出すときの注意</p><ul class="small">${tl.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul><p class="small">${esc(tl.tail).replace("相続税の申告要否判定コーナー", '<a href="https://www.keisan.nta.go.jp/sozoku/yohihantei/top" target="_blank" rel="noopener">相続税の申告要否判定コーナー</a>')}</p></div>
 </section>
 <section class="ip-block ip-choices-block"><h3>2. あなたに選べること</h3><h4>相続の仕方</h4><div class="ip-cards">${choice("仕方")}</div><h4>土地・家をどうするか</h4><div class="ip-cards">${choice("土地")}</div><p class="small">売却・解体・管理・活用は、1社で決めず複数社の見積りと説明を比べてから決めるのが安全です。</p></section>
 <section class="ip-block"><h3>3. 大きな失敗をしないために</h3><ul class="ip-cautions">${pk.cautions.map((k) => `<li class="${k.isStrong ? "strong" : ""}"><b>${esc(k.title)}</b><br>${esc(k.why)}</li>`).join("")}</ul></section>
-<section class="ip-block no-print ip-exports"><h3>持ち出す・見返す</h3>
-<div class="exports"><button type="button" data-x="print">印刷する（手順書）</button><button type="button" data-x="csv">表（シート）で保存（Excel・スプレッドシート）</button><button type="button" data-x="ics">まだの期限をカレンダーに追加（.ics）</button><button type="button" data-x="md">Markdownで保存</button><button type="button" data-x="mdcopy">Markdownをコピー</button><button type="button" data-x="txt">メモ用テキストをコピー</button></div>
-<p class="small ip-ics-note"></p>
-<p class="small">表（シート）は、済んだもの・まだのものを1行ずつ並べたCSVファイルです。ExcelやGoogleスプレッドシートで開くと、済んだ日やメモを書き込んで管理できます。<br>カレンダーには、まだ済んでいない手続きのうち今日より後の期限を、1か月前と1週間前の通知つきで書き出します。<br>このページのURLをブックマークすると、同じパックをあとから開き直せます。<br>回答はURLの「#」より後ろに入っていて、サーバーには送られません。共有するときは回答の内容が見える点にご注意ください。</p>
-</section>
 <p class="small">手続きの内容は${CHECKED_JA}に公式の案内で確認しました。<br>一般的な手続きの目安で、個別の事情への助言ではありません。期限が土日祝日にあたる場合の扱いは、手続きごとに窓口へご確認ください。</p>
 </div>`;
   }
