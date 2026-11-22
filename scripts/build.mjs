@@ -53,7 +53,14 @@ import { readFileSync, writeFileSync } from "node:fs";
     grouped[pref] = Object.fromEntries(Object.entries(grouped[pref]).sort(([a], [b]) => yomi(a).localeCompare(yomi(b), "ja") || a.localeCompare(b, "ja")));
   }
   if (missing.length) throw new Error(`市区町村の読みがありません（src/city-kana.json に追加してください）: ${[...new Set(missing)].join("、")}`);
-  writeFileSync("site/assets/houmukyoku.json", JSON.stringify(grouped));
+  // 都道府県は都道府県コード（JIS X 0401）の順（北海道〜沖縄県）に並べる
+  const JIS = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県", "和歌山県",
+    "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"];
+  const unknown = Object.keys(grouped).filter((p) => !JIS.includes(p));
+  if (unknown.length) throw new Error(`都道府県コード表にない名前: ${unknown.join("、")}`);
+  const ordered = Object.fromEntries(JIS.filter((p) => grouped[p]).map((p) => [p, grouped[p]]));
+  writeFileSync("site/assets/houmukyoku.json", JSON.stringify(ordered));
   console.log("houmukyoku.json:", Object.values(grouped).reduce((n, g) => n + Object.keys(g).length, 0), "件");
 }
 
