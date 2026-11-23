@@ -1,6 +1,6 @@
 // 相続手続きパックのウィザード（ブラウザ側）。回答はこの端末の中だけで使い、どこにも送信・保存しない。
 // 見返し用に回答を URL の # 以降に入れる（# 以降はサーバーに送られない）。計測は「どの画面まで進んだか」だけを送る。
-import { fmtDateShort } from "./dates.ts";
+import { fmtDate, fmtDateShort, fromParts, parseYmd } from "./dates.ts";
 import { CHECKED_JA, CATEGORY_ORDER, LAND_TYPE_LABEL, PROCEDURES, type Answers, type LandType, type YNU } from "./master.ts";
 import {
   BUCKET_LABEL, buildCsv, buildIcs, buildMarkdown, buildPack, buildPlainText, consultFor, decodeAnswers, dueLabel, encodeAnswers,
@@ -63,6 +63,20 @@ function doneToggle(id: string, title: string, done: boolean): string {
   return `<div class="ip-toggle" role="radiogroup" aria-label="${esc(title)}は済みましたか"><label><input type="radio" name="t_${id}" value="0" data-done="${id}"${done ? "" : " checked"}><span>まだ</span></label><label><input type="radio" name="t_${id}" value="1" data-done="${id}"${done ? " checked" : ""}><span>済んだ</span></label></div>`;
 }
 
+/** 日付の入力欄：年は西暦の下2桁、月と日は選ぶ */
+function dateField(name: string, val: string | undefined, label: string): string {
+  const d = parseYmd(val);
+  const yy = d ? String(d.getFullYear() % 100).padStart(2, "0") : "";
+  const opt = (n: number, sel: number | undefined) => `<option value="${n}"${sel === n ? " selected" : ""}>${n}</option>`;
+  const ms = Array.from({ length: 12 }, (_, i) => opt(i + 1, d ? d.getMonth() + 1 : undefined)).join("");
+  const ds = Array.from({ length: 31 }, (_, i) => opt(i + 1, d ? d.getDate() : undefined)).join("");
+  return `<div class="ip-date" data-date="${name}" role="group" aria-label="${esc(label)}">` +
+    `<input type="text" name="${name}_y" class="ip-input ip-yy" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="26" value="${yy}" aria-label="年（西暦の下2桁）"><span>年</span>` +
+    `<select name="${name}_m" class="ip-select ip-md" aria-label="月"><option value=""></option>${ms}</select><span>月</span>` +
+    `<select name="${name}_d" class="ip-select ip-md" aria-label="日"><option value=""></option>${ds}</select><span>日</span></div>` +
+    `<p class="ip-date-out" data-out="${name}" aria-live="polite"></p>`;
+}
+
 const STEPS = ["いつ", "家族", "遺言と借金", "不動産", "亡くなった方の住所", "そのほかの財産", "済ませた手続き"] as const;
 
 export function mount(root: HTMLElement) {
@@ -103,9 +117,9 @@ export function mount(root: HTMLElement) {
 
   function screen(i: number): string {
     switch (i) {
-      case 0: return q("亡くなった日", `<input type="date" name="death" class="ip-input" value="${esc(a.death ?? "")}">`, "分からなければ空欄のままで進めます（期限の日付は出ません）。") +
+      case 0: return `<p class="ip-intro">どの質問も<b>任意</b>です。分からないところは空欄や「分からない」のまま進めます。</p>` + q("亡くなった日", dateField("death", a.death, "亡くなった日"), "年は西暦の下2桁です（2026年なら 26）。分からなければ空欄のままで進めます（期限の日付は出ません）。") +
         q("亡くなったことを知った日が、亡くなった日と違いますか", radios("knownDiff", [["n", "同じ"], ["y", "後から知った"]], a.known ? "y" : "n") +
-          `<div class="ip-sub" data-show="knownDiff=y"><input type="date" name="known" class="ip-input" value="${esc(a.known ?? "")}"></div>`,
+          `<div class="ip-sub" data-show="knownDiff=y">${dateField("known", a.known, "亡くなったことを知った日")}</div>`,
           "相続放棄や相続税などの期限は「相続を知った日」から数えます。");
       case 1: return q("亡くなった方に配偶者はいますか", radios("spouse", [["y", "いる"], ["n", "いない"]], a.spouse)) +
         q("亡くなった方の子は何人ですか", countSelect("kids", a.kids, "子はいない"), "先に亡くなった子がいて、その子に子（孫）がいる場合は、孫の人数を足して数えてください。養子も含めます。") +
@@ -145,7 +159,10 @@ export function mount(root: HTMLElement) {
     const s = (k: string) => (f.get(k) as string | null) || undefined;
     const n = (k: string) => { const v = s(k); return v === undefined ? undefined : Number(v); };
     switch (step) {
-      case 0: a.death = s("death"); a.known = s("knownDiff") === "y" ? s("known") : undefined; break;
+      case 0: {
+        const dp = (k: string) => { const r = fromParts(s(`${k}_y`) ?? "", s(`${k}_m`) ?? "", s(`${k}_d`) ?? "", today()); return r.ok && r.value ? r.value : undefined; };
+        a.death = dp("death"); a.known = s("knownDiff") === "y" ? dp("known") : undefined; break;
+      }
       case 1:
         a.spouse = s("spouse") as Answers["spouse"]; a.kids = n("kids");
         a.minor = a.kids !== undefined && a.kids > 0 ? s("minor") as YNU : undefined;
@@ -189,17 +206,53 @@ ${screen(step)}
 </form>`;
     const form = root.querySelector("form")!;
     applyShow(form);
+    // 日付のエラーは、欄（年・月・日のまとまり）から離れたときと「次へ」を押したときだけ出す。
+    // 入力の途中では出さない。正しい日付の確認表示はすぐ出す。
+    const touched = new Set<string>();
+    const checkDates = (showAll = false): boolean => {
+      let ok = true;
+      form.querySelectorAll<HTMLElement>(".ip-date").forEach((box) => {
+        const k = box.dataset.date!;
+        const out = form.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+        if (box.closest<HTMLElement>(".ip-sub")?.hidden) { out.textContent = ""; out.classList.remove("ip-date-err"); return; }
+        const v = (x: string) => (box.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${k}_${x}"]`)!.value);
+        const r = fromParts(v("y"), v("m"), v("d"), today());
+        if (!r.ok) ok = false;
+        if (showAll && !r.ok) touched.add(k);
+        const showErr = !r.ok && touched.has(k) && (showAll || !box.contains(document.activeElement));
+        out.classList.toggle("ip-date-err", showErr);
+        out.textContent = r.ok ? (r.value ? `→ ${fmtDate(parseYmd(r.value)!)}` : "") : showErr ? r.error : "";
+        box.querySelectorAll("input, select").forEach((el) => el.setAttribute("aria-invalid", String(showErr)));
+      });
+      return ok;
+    };
+    form.addEventListener("focusout", (e) => {
+      const box = (e.target as HTMLElement).closest<HTMLElement>(".ip-date");
+      if (!box || box.contains(e.relatedTarget as Node | null)) return;
+      touched.add(box.dataset.date!);
+      checkDates();
+    });
+    checkDates();
+    form.addEventListener("input", (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.classList.contains("ip-yy")) { const c = t.value.replace(/[０-９]/g, (z) => String.fromCharCode(z.charCodeAt(0) - 0xfee0)).replace(/\D/g, "").slice(0, 4); if (c !== t.value) t.value = c; }
+      checkDates();
+    });
     form.addEventListener("change", (e) => {
       const t = e.target as HTMLSelectElement;
+      // 西暦4桁で入れた人には下2桁に直す（2026 → 26）
+      if (t.classList.contains("ip-yy") && /^(19|20)\d\d$/.test(t.value)) t.value = t.value.slice(2);
       if (t.name === "lpref" || t.name === "dpref") {
         const city = form.querySelector<HTMLSelectElement>(`select[name="${t.name === "lpref" ? "lcity" : "dcity"}"]`)!;
         city.innerHTML = cityOptions(t.value);
       }
       applyShow(form);
+      checkDates();
     });
     form.querySelector(".ip-back")?.addEventListener("click", () => { readForm(form); step--; renderStep(); scrollTop(); });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      if (!checkDates(true)) { form.querySelector<HTMLElement>(".ip-date-err")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
       readForm(form);
       if (!started) { started = true; track("wizard_start"); }
       track("wizard_step", { step: step + 1 });

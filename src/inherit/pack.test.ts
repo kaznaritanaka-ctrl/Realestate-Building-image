@@ -191,3 +191,16 @@ test("PDF用HTML：法務局・役場の電話が入る", async () => {
   assert.ok(rows.some((r) => r.kind === "市区町村役場" && r.tel === "0980-82-9911"));
   assert.equal(rows.filter((r) => r.name === "石垣市役所").length, 1, "同じ市なら1行");
 });
+
+test("日付の入力：年は西暦の下2桁", async () => {
+  const { fromParts } = await import("./dates.ts");
+  const t = D("2026-11-23");
+  assert.deepEqual(fromParts("26", "10", "1", t), { ok: true, value: "2026-10-01" });
+  assert.deepEqual(fromParts("5", "3", "31", t), { ok: true, value: "2005-03-31" });
+  assert.deepEqual(fromParts("98", "1", "2", t), { ok: true, value: "1998-01-02" }, "今年より後の下2桁は1900年代");
+  assert.deepEqual(fromParts("", "", "", t), { ok: true, value: "" });
+  assert.equal(fromParts("123", "1", "1", t).ok, false, "3桁以上は不可");
+  assert.equal(fromParts("26", "2", "30", t).ok, false, "ない日付");
+  assert.equal(fromParts("26", "12", "1", t).ok, false, "未来の日付");
+  assert.equal(fromParts("26", "", "1", t).ok, false, "月がない");
+});

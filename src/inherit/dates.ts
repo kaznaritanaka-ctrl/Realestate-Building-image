@@ -41,3 +41,24 @@ export function fmtDate(d: Date): string {
 export function fmtDateShort(d: Date): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
+
+/**
+ * 年（西暦の下2桁）・月・日の入力を "YYYY-MM-DD" にする。
+ * 下2桁が今年より後なら 1900年代とみなす（例：今年が2026年なら 26→2026、98→1998）。
+ * 全部空なら ""、足りない・ありえない日付・未来の日付なら理由を返す。
+ */
+export type DateParts = { ok: true; value: string } | { ok: false; error: string };
+export function fromParts(yy: string, m: string, d: string, today: Date): DateParts {
+  yy = yy.trim(); m = m.trim(); d = d.trim();
+  if (!yy && !m && !d) return { ok: true, value: "" };
+  if (!/^\d{1,2}$/.test(yy)) return { ok: false, error: "年は西暦の下2桁を数字で入れてください（例：2026年なら 26）。" };
+  if (!m || !d) return { ok: false, error: "月と日も選んでください。" };
+  const n = Number(yy);
+  const cur = today.getFullYear();
+  const y = 2000 + n <= cur ? 2000 + n : 1900 + n;
+  const s = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const dt = parseYmd(s);
+  if (!dt) return { ok: false, error: `${y}年${Number(m)}月${Number(d)}日はありません。` };
+  if (daysBetween(today, dt) > 0) return { ok: false, error: "今日より後の日付は入れられません。" };
+  return { ok: true, value: s };
+}
