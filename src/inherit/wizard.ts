@@ -117,7 +117,7 @@ export function mount(root: HTMLElement) {
 
   function screen(i: number): string {
     switch (i) {
-      case 0: return q("亡くなった日", dateField("death", a.death, "亡くなった日"), "年は西暦の下2桁です（2026年なら 26）。分からなければ空欄のままで進めます（期限の日付は出ません）。") +
+      case 0: return `<p class="ip-intro">どの質問も<b>任意</b>です。分からないところは空欄や「分からない」のまま進めます。</p>` + q("亡くなった日", dateField("death", a.death, "亡くなった日"), "年は西暦の下2桁です（2026年なら 26）。分からなければ空欄のままで進めます（期限の日付は出ません）。") +
         q("亡くなったことを知った日が、亡くなった日と違いますか", radios("knownDiff", [["n", "同じ"], ["y", "後から知った"]], a.known ? "y" : "n") +
           `<div class="ip-sub" data-show="knownDiff=y">${dateField("known", a.known, "亡くなったことを知った日")}</div>`,
           "相続放棄や相続税などの期限は「相続を知った日」から数えます。");
@@ -206,20 +206,32 @@ ${screen(step)}
 </form>`;
     const form = root.querySelector("form")!;
     applyShow(form);
-    const checkDates = (): boolean => {
+    // 日付のエラーは、欄（年・月・日のまとまり）から離れたときと「次へ」を押したときだけ出す。
+    // 入力の途中では出さない。正しい日付の確認表示はすぐ出す。
+    const touched = new Set<string>();
+    const checkDates = (showAll = false): boolean => {
       let ok = true;
       form.querySelectorAll<HTMLElement>(".ip-date").forEach((box) => {
         const k = box.dataset.date!;
         const out = form.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
-        if (box.closest<HTMLElement>(".ip-sub")?.hidden) { out.textContent = ""; return; }
+        if (box.closest<HTMLElement>(".ip-sub")?.hidden) { out.textContent = ""; out.classList.remove("ip-date-err"); return; }
         const v = (x: string) => (box.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${k}_${x}"]`)!.value);
         const r = fromParts(v("y"), v("m"), v("d"), today());
-        out.classList.toggle("ip-date-err", !r.ok);
-        out.textContent = r.ok ? (r.value ? `→ ${fmtDate(parseYmd(r.value)!)}` : "") : r.error;
         if (!r.ok) ok = false;
+        if (showAll && !r.ok) touched.add(k);
+        const showErr = !r.ok && touched.has(k) && (showAll || !box.contains(document.activeElement));
+        out.classList.toggle("ip-date-err", showErr);
+        out.textContent = r.ok ? (r.value ? `→ ${fmtDate(parseYmd(r.value)!)}` : "") : showErr ? r.error : "";
+        box.querySelectorAll("input, select").forEach((el) => el.setAttribute("aria-invalid", String(showErr)));
       });
       return ok;
     };
+    form.addEventListener("focusout", (e) => {
+      const box = (e.target as HTMLElement).closest<HTMLElement>(".ip-date");
+      if (!box || box.contains(e.relatedTarget as Node | null)) return;
+      touched.add(box.dataset.date!);
+      checkDates();
+    });
     checkDates();
     form.addEventListener("input", (e) => {
       const t = e.target as HTMLInputElement;
@@ -240,7 +252,7 @@ ${screen(step)}
     form.querySelector(".ip-back")?.addEventListener("click", () => { readForm(form); step--; renderStep(); scrollTop(); });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      if (!checkDates()) { form.querySelector<HTMLElement>(".ip-date-err")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+      if (!checkDates(true)) { form.querySelector<HTMLElement>(".ip-date-err")?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
       readForm(form);
       if (!started) { started = true; track("wizard_start"); }
       track("wizard_step", { step: step + 1 });
